@@ -17,7 +17,7 @@ dependencies = ["mcp>=2.3,<3", "cedarpy>=4.12"]
 test = ["pytest>=8", "anyio>=4"]
 
 [project.urls]
-Source = "https://github.com/Aakashdeeeep/MCP/tree/main/packages/mcp-blast-radius"
+Source = "https://github.com/Aakashdeeeep/MCP/tree/HEAD/packages/mcp-blast-radius"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_blast_radius"]

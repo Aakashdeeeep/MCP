@@ -33,8 +33,8 @@
           "Ask Raksha to tell my daughter I'm feeling better"
         ],
         "privacyAndCompliance": {
-          "privacyPolicyUrl": "https://github.com/Aakashdeeeep/MCP/blob/main/PRIVACY.md",
-          "termsOfUseUrl": "https://github.com/Aakashdeeeep/MCP/blob/main/TERMS.md"
+          "privacyPolicyUrl": "https://github.com/Aakashdeeeep/MCP/blob/HEAD/PRIVACY.md",
+          "termsOfUseUrl": "https://github.com/Aakashdeeeep/MCP/blob/HEAD/TERMS.md"
         },
         "mediaAssets": {
           "bannerImages": [],
@@ -42,7 +42,7 @@
             {
               "altText": "Raksha: medicines, family and scam protection for Alexa+",
               "size": "600x900",
-              "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/carousel-600x900.png"
+              "uri": "https://raw.githubusercontent.com/Aakashdeeeep/MCP/HEAD/alexa/assets/carousel-600x900.png"
             }
           ],
           "icons": {
@@ -50,27 +50,27 @@
             "light": [
               {
                 "size": "64x64",
-                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-64x64.png"
+                "uri": "https://raw.githubusercontent.com/Aakashdeeeep/MCP/HEAD/alexa/assets/icon-64x64.png"
               },
               {
                 "size": "72x72",
-                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-72x72.png"
+                "uri": "https://raw.githubusercontent.com/Aakashdeeeep/MCP/HEAD/alexa/assets/icon-72x72.png"
               },
               {
                 "size": "88x88",
-                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-88x88.png"
+                "uri": "https://raw.githubusercontent.com/Aakashdeeeep/MCP/HEAD/alexa/assets/icon-88x88.png"
               },
               {
                 "size": "126x126",
-                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-126x126.png"
+                "uri": "https://raw.githubusercontent.com/Aakashdeeeep/MCP/HEAD/alexa/assets/icon-126x126.png"
               },
               {
                 "size": "180x180",
-                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-180x180.png"
+                "uri": "https://raw.githubusercontent.com/Aakashdeeeep/MCP/HEAD/alexa/assets/icon-180x180.png"
               },
               {
                 "size": "241x241",
-                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-241x241.png"
+                "uri": "https://raw.githubusercontent.com/Aakashdeeeep/MCP/HEAD/alexa/assets/icon-241x241.png"
               }
             ]
           }

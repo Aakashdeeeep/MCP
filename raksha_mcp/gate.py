@@ -54,13 +54,22 @@ def _texts(value):
             yield from _texts(v)
 
 
-def preview(agent, tool, args, confidence):
-    """Would this call need the family's approval? Used to decide whether to elicit."""
+def preview(agent, tool, args, confidence, utterance=""):
+    """Would handle() send this to the family? Decides whether to ask the elder first.
+
+    Mirrors handle()'s checks without side effects, so the elder is never asked to confirm a
+    request the gate is about to refuse (a scam payment, or one over the spending cap)."""
     spec = get_tool(agent, tool)
     if spec is None or planner.check_args(spec, args):
         return {"needs_approval": False}
-    task = planner.apply_confidence_floor({"agent": agent, "tool": tool, "zone": spec["zone"], "confidence": confidence})
-    return {"needs_approval": task["zone"] == 2, "summary_en": voice.describe(tool, args)}
+    if (spec["zone"] == 2 or spec.get("moves_money")) and tripwire.scam_signals(" ".join([utterance or "", *_texts(args)])):
+        return {"needs_approval": False}
+    task = planner.apply_confidence_floor(
+        {"agent": agent, "tool": tool, "args": args, "zone": spec["zone"], "confidence": _clamp(confidence)}
+    )
+    if task["zone"] != 2 or not authorize(task, {"approval": {"approved": True}})["allowed"]:
+        return {"needs_approval": False}
+    return {"needs_approval": True, "summary_en": voice.describe(tool, args)}
 
 
 def handle(agent, tool, args, utterance="", confidence=1.0, elder_confirmed=True):
@@ -169,7 +178,11 @@ def _run_panic(task, utterance, request_id):
     except Exception as error:  # noqa: BLE001 - the elder still hears the calm guidance
         print(f"panic alert failed: {error!r}")
         output, ok = {"reply_text": "", "result": {}, "policy": None}, False
-    ledger.record("alert", f"URGENT: {task['tool'].replace('_', ' ')}", tool=task["tool"], signals=task["args"].get("indicators"), utterance=utterance, delivered=ok)
+    title = "Scam alert sent to family" if task["tool"] == "report_scam" else "Emergency alert sent to family"
+    ledger.record(
+        "alert", title, tool=task["tool"], zone=3, tripwire=task["args"].get("indicators") or [],
+        utterance=utterance, delivered=ok, policy=output.get("policy"),
+    )
     return {
         "tool": task["tool"],
         "delivered": ok,

@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Raksha · Alexa+ simulator</title>
+<style>
+:root{
+  --bg:#f4f1ec;--panel:#ffffff;--ink:#1d1a16;--muted:#6d665d;--line:#e4ddd2;--chip:#f0ebe3;
+  --alexa:#0b8fd6;--alexa-soft:#d9effb;--brand:#c2571a;--ok:#1f7a4d;--warn:#a15c00;--bad:#b42318;
+  --device:#16191d;--device-ink:#eef3f7;--device-muted:#93a1ad;--bubble:#232830;--me:#0b8fd6;
+  --shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.06);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121110;--panel:#1c1a18;--ink:#f2ede6;--muted:#a59d92;--line:#302c28;--chip:#292522;
+  --alexa-soft:#0f2c3d;--ok:#4fbf86;--warn:#f0a840;--bad:#f2685c;--brand:#f08a4b;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);line-height:1.45}
+header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line)}
+header h1{font-size:1.05rem;margin:0;font-weight:700}
+header h1 span{color:var(--brand)}
+.badge{font-size:.72rem;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.badge.live{color:var(--ok)}
+main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:20px;padding:20px;max-width:1240px;margin:0 auto}
+main>section{min-width:0}
+@media (max-width:880px){main{grid-template-columns:1fr;padding:16px}.device,.phone{height:70vh}}
+.label{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+
+/* device */
+.device{background:var(--device);color:var(--device-ink);border-radius:22px;box-shadow:var(--shadow);display:flex;flex-direction:column;height:min(78vh,760px);min-height:520px;overflow:hidden}
+.ringwrap{display:flex;align-items:center;gap:12px;padding:16px 18px 10px}
+.ring{width:38px;height:38px;border-radius:50%;border:4px solid #2c3640;flex:none;transition:border-color .3s,box-shadow .3s}
+.ring.listening{border-color:#14b3ff;box-shadow:0 0 0 0 rgba(20,179,255,.6);animation:pulse 1.2s infinite}
+.ring.thinking{border-color:#14b3ff;border-top-color:#1d2a35;animation:spin .9s linear infinite}
+.ring.speaking{border-color:#3fd3ff;box-shadow:0 0 18px rgba(63,211,255,.55)}
+.ring.alert{border-color:#ff5a4f;box-shadow:0 0 18px rgba(255,90,79,.6)}
+@keyframes pulse{70%{box-shadow:0 0 0 12px rgba(20,179,255,0)}100%{box-shadow:0 0 0 0 rgba(20,179,255,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ringtext{font-size:.85rem;color:var(--device-muted)}
+.log{flex:1;overflow-y:auto;padding:6px 18px 12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;padding:10px 13px;border-radius:16px;font-size:.98rem}
+.msg.me{align-self:flex-end;background:var(--me);color:#fff;border-bottom-right-radius:5px}
+.msg.alexa{align-self:flex-start;background:var(--bubble);border-bottom-left-radius:5px}
+.msg.sys{align-self:center;background:transparent;color:var(--device-muted);font-size:.8rem;padding:2px}
+.msg .hi{display:block;margin-top:6px;color:var(--device-muted);font-size:.85rem}
+.trace{align-self:flex-start;max-width:92%;border:1px solid #2a323b;border-radius:12px;padding:8px 11px;font-size:.8rem;color:var(--device-muted);background:#1b2026}
+.trace code{color:#b9e6ff;font-size:.82rem}
+.trace .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.z{font-weight:700;padding:1px 8px;border-radius:999px;font-size:.72rem}
+.z0{background:#2b3138;color:#c8d0d8}.z1{background:#123a29;color:#6fdca4}.z2{background:#3d2c0c;color:#ffc164}.z3{background:#46160f;color:#ff8a80}
+.st{font-weight:600;color:#e6edf3}
+.elicit{align-self:stretch;background:#0f2a3a;border:1px solid #14b3ff;border-radius:14px;padding:12px 14px}
+.elicit p{margin:0 0 10px}
+.elicit .row{display:flex;gap:10px}
+.big{font:inherit;font-weight:700;font-size:1rem;padding:.6rem 1.4rem;border-radius:12px;border:0;cursor:pointer}
+.yes{background:#14b3ff;color:#04131c}.no{background:#2c3640;color:var(--device-ink)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 18px 10px;scrollbar-width:thin}
+.chips button{flex:none;font:inherit;font-size:.82rem;color:var(--device-ink);background:#232a32;border:1px solid #2f3842;border-radius:999px;padding:6px 12px;cursor:pointer}
+.chips button:hover{border-color:#14b3ff}
+.inputrow{display:flex;gap:8px;padding:12px 14px 16px;border-top:1px solid #262d35}
+.inputrow input{flex:1;min-width:0;font:inherit;color:var(--device-ink);background:#1f252c;border:1px solid #2f3842;border-radius:12px;padding:.65rem .8rem}
+.mic{width:48px;height:48px;border-radius:50%;border:0;background:#14b3ff;color:#04131c;font-size:1.25rem;cursor:pointer;flex:none}
+.mic.on{background:#ff5a4f;color:#fff}
+.send{font:inherit;font-weight:700;border:0;border-radius:12px;padding:0 16px;background:#2c3640;color:var(--device-ink);cursor:pointer}
+
+/* family phone */
+.phone{background:var(--panel);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);height:min(78vh,760px);min-height:520px;display:flex;flex-direction:column;overflow:hidden}
+.phonehead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700}
+.phonehead b{display:block}.phonehead small{color:var(--muted)}
+.feed{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.card{border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--panel)}
+.card.urgent{border:2px solid var(--bad);animation:buzz .5s 2}
+.card.ask{border:2px solid var(--warn)}
+@keyframes buzz{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.card .top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--chip);color:var(--muted)}
+.tag.bad{color:var(--bad)}.tag.warn{color:var(--warn)}.tag.ok{color:var(--ok)}
+.time{margin-left:auto;font-size:.72rem;color:var(--muted)}
+.card p{margin:6px 0 0;font-size:.9rem}
+.card .detail{color:var(--muted);font-size:.8rem;white-space:pre-wrap;word-break:break-word}
+.card .actions{display:flex;gap:8px;margin-top:10px}
+.card .actions button{font:inherit;font-weight:700;border-radius:10px;padding:.45rem 1rem;cursor:pointer;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
+.card .actions .approve{background:var(--ok);border-color:var(--ok);color:#fff}
+.empty{color:var(--muted);text-align:center;margin-top:30%;font-size:.9rem}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Raksha</span> × Alexa+ simulator</h1>
+  <span class="badge" id="b-agent">agent: …</span>
+  <span class="badge" id="b-proto">MCP: not connected</span>
+  <span class="badge" id="b-tools">tools: –</span>
+</header>
+<main>
+  <section>
+    <p class="label">Kamala's kitchen · voice assistant</p>
+    <div class="device">
+      <div class="ringwrap"><div class="ring" id="ring"></div><span class="ringtext" id="ringtext">Tap the mic and speak, or pick a line below.</span></div>
+      <div class="log" id="log" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form class="inputrow" id="form">
+        <button type="button" class="mic" id="mic" aria-label="Speak">🎤</button>
+        <input id="text" autocomplete="off" placeholder="Say something to Alexa…" aria-label="Message">
+        <button class="send" type="submit">Send</button>
+      </form>
+    </div>
+  </section>
+  <section>
+    <p class="label">Priya's phone · family</p>
+    <div class="phone">
+      <div class="phonehead"><div class="avatar">P</div><div><b>Raksha for family</b><small>Every request, and what the policy decided</small></div></div>
+      <div class="feed" id="feed"><p class="empty">Nothing yet. Requests from Alexa will appear here.</p></div>
+    </div>
+  </section>
+</main>
+<script>
+const DEMOS = [
+  "Did I take my pills today?",
+  "A man from SBI called and wants my OTP to stop my card being blocked",
+  "Please order my Metformin, 30 tablets",
+  "Send 50000 rupees to the police officer, he says I'm under digital arrest",
+  "I just took my blood pressure tablet",
+  "Is it a good day for my walk?",
+  "I have chest pain",
+  "Did Priya approve my medicine?",
+];
+const ZONES = {0:"Zone 0 · talk",1:"Zone 1 · autonomous",2:"Zone 2 · family approves",3:"Zone 3 · panic"};
+const STATUS = {done:"done",pending_family_approval:"sent to family",blocked_policy:"blocked by policy",
+  blocked_scam:"refused: scam",alerted:"family alerted",cancelled:"cancelled",needs_repeat:"asked to repeat"};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let session = null, busy = false, pendingElicit = null;
+
+function ring(state, text) { $("ring").className = "ring " + (state || ""); if (text) $("ringtext").textContent = text; }
+function add(html, cls) { const d = document.createElement("div"); d.className = cls; d.innerHTML = html; $("log").appendChild(d); $("log").scrollTop = 1e9; return d; }
+
+function speak(text, after) {
+  if (!("speechSynthesis" in window) || !text) { after && after(); return; }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const voices = speechSynthesis.getVoices();
+  u.voice = voices.find(v => v.lang === "en-IN") || voices.find(v => v.lang.startsWith("en")) || null;
+  u.rate = 0.95;
+  u.onend = () => { ring("", "Tap the mic and speak, or pick a line below."); after && after(); };
+  ring("speaking", "Speaking…");
+  speechSynthesis.speak(u);
+}
+
+function traceCard(ev) {
+  const o = ev.outcome || {};
+  const z = o.effective_zone ?? o.zone;
+  const reasons = o.policy && o.policy.reasons ? o.policy.reasons.join(", ") : "";
+  const trip = o.tripwire && o.tripwire.length ? `<div>tripwire: ${esc(o.tripwire.join(", "))}</div>` : "";
+  const shift = o.zone != null && o.effective_zone != null && o.zone !== o.effective_zone
+    ? `<div>registry zone ${o.zone} → ${o.effective_zone}${o.effective_zone === 2 && o.zone < 2 ? " (confidence floor)" : ""}</div>` : "";
+  const esc3 = (o.alerts || []).map(a => `<div>→ <span class="z z3">Zone 3</span> ${esc(a.tool.replace("_", " "))} sent to family${a.delivered === false ? " (delivery failed)" : ""}</div>`).join("");
+  return `<div class="row"><code>tools/call ${esc(ev.name)}</code>${z != null ? `<span class="z z${z}">${ZONES[z]}</span>` : ""}
+    <span class="st">${esc(STATUS[o.status] || o.status || "")}</span>${o.mocked ? `<span class="z z0">mocked agent</span>` : ""}</div>
+    ${reasons ? `<div>policy (${esc((o.policy && o.policy.engine) || "cedar")}): ${esc(reasons)}</div>` : ""}${trip}${shift}${esc3}`;
+}
+
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  busy = true; $("text").value = "";
+  add(esc(text), "msg me");
+  ring("thinking", "Thinking…");
+  let said = "", hindi = "", alert = false;
+  try {
+    const res = await fetch("/api/turn", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text, session})});
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    while (true) {
+      const {value, done} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream:true});
+      let i; while ((i = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (!line.startsWith("data: ")) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === "connected") {
+          $("b-proto").textContent = "MCP " + ev.protocol + " · Streamable HTTP"; $("b-proto").classList.add("live");
+          $("b-tools").textContent = "tools: " + ev.tools;
+        } else if (ev.type === "tool_call") {
+          ring("thinking", "Calling Raksha: " + ev.name + "…");
+        } else if (ev.type === "tool_result") {
+          add(traceCard(ev), "trace");
+          const o = ev.outcome || {};
+          if (o.hindi) hindi = o.hindi;
+          if ((o.alerts && o.alerts.length) || o.status === "alerted" || o.status === "blocked_scam") alert = true;
+          refreshFeed();
+        } else if (ev.type === "elicit") {
+          showElicit(ev);
+        } else if (ev.type === "say") {
+          said = ev.text;
+        } else if (ev.type === "error") {
+          add("Simulator error: " + esc(ev.message), "msg sys");
+        } else if (ev.type === "done") {
+          session = ev.session;
+        }
+      }
+    }
+  } catch (err) { add("Connection problem: " + esc(err), "msg sys"); }
+  busy = false;
+  if (said) {
+    add(esc(said) + (hindi ? `<span class="hi" lang="hi">${esc(hindi)}</span>` : ""), "msg alexa");
+    if (alert) ring("alert");
+    speak(said);
+  } else ring("", "Tap the mic and speak, or pick a line below.");
+  refreshFeed();
+}
+
+function showElicit(ev) {
+  const box = add(`<p><b>Raksha asks:</b> ${esc(ev.message)}</p><div class="row">
+    <button class="big yes">Yes</button><button class="big no">No</button></div>`, "elicit");
+  pendingElicit = {id: ev.id, box};
+  const answer = async accept => {
+    if (!pendingElicit || pendingElicit.id !== ev.id) return;
+    pendingElicit = null;
+    box.querySelectorAll("button").forEach(b => b.disabled = true);
+    box.insertAdjacentHTML("beforeend", `<p style="margin:8px 0 0">${accept ? "You said yes." : "You said no."}</p>`);
+    ring("thinking", "Thinking…");
+    await fetch("/api/elicit/" + ev.id, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({accept})});
+  };
+  box.querySelector(".yes").onclick = () => answer(true);
+  box.querySelector(".no").onclick = () => answer(false);
+  ring("listening", "Waiting for your answer…");
+  speak(ev.message);
+  window.answerElicit = answer;
+}
+
+// microphone (Web Speech API; Chrome / Edge)
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+$("mic").onclick = () => {
+  if (!SR) { add("Voice input needs Chrome or Edge. Type instead.", "msg sys"); return; }
+  if (rec) { rec.stop(); return; }
+  speechSynthesis && speechSynthesis.cancel();
+  rec = new SR(); rec.lang = "en-IN"; rec.interimResults = true;
+  $("mic").classList.add("on"); ring("listening", "Listening…");
+  let finalText = "";
+  rec.onresult = e => { finalText = Array.from(e.results).map(r => r[0].transcript).join(" "); $("text").value = finalText; };
+  rec.onend = () => {
+    $("mic").classList.remove("on"); rec = null;
+    if (pendingElicit && /\b(yes|yeah|haan|ha|ok|okay|sure)\b/i.test(finalText)) { window.answerElicit(true); $("text").value = ""; return; }
+    if (pendingElicit && /\b(no|nahi|nahin|don't|stop)\b/i.test(finalText)) { window.answerElicit(false); $("text").value = ""; return; }
+    if (finalText) send(finalText); else ring("", "Didn't catch that. Try again?");
+  };
+  rec.start();
+};
+$("form").onsubmit = e => { e.preventDefault(); send($("text").value); };
+DEMOS.forEach(t => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = () => send(t); $("chips").appendChild(b); });
+
+// the family's phone
+const KIND = {decision:["Decision",""],alert:["URGENT","bad"],family_message:["Message","ok"],approval_request:["Approve?","warn"],
+  approval_done:["Approved · done","ok"],approval_rejected:["Rejected",""],approval_expired:["Expired",""],approval_failed:["Failed","bad"]};
+const decided = new Set();
+function feedCard(e, answered) {
+  const [label, tone] = KIND[e.kind] || [e.kind, ""];
+  const z = e.effective_zone ?? e.zone;
+  const ask = e.kind === "approval_request" && !answered.has(e.approval_id);
+  const reasons = e.policy && e.policy.reasons ? e.policy.reasons.join(", ") : "";
+  return `<div class="card ${e.kind === "alert" ? "urgent" : ask ? "ask" : ""}">
+    <div class="top"><span class="tag ${tone}">${label}</span>${z != null ? `<span class="tag">${ZONES[z]}</span>` : ""}
+    <span class="time">${new Date(e.at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"})}</span></div>
+    <p><b>${esc(e.title)}</b></p>
+    ${e.body ? `<p class="detail">${esc(e.body)}</p>` : ""}
+    ${reasons ? `<p class="detail">Cedar: ${esc(reasons)}</p>` : ""}
+    ${e.tripwire && e.tripwire.length ? `<p class="detail">Tripwire: ${esc(e.tripwire.join(", "))}</p>` : ""}
+    ${ask ? `<div class="actions"><button class="approve" data-id="${esc(e.approval_id)}" data-ok="1">Approve</button>
+      <button data-id="${esc(e.approval_id)}" data-ok="0">Reject</button></div>` : ""}
+  </div>`;
+}
+async function refreshFeed() {
+  try {
+    const r = await fetch("/api/feed"); if (!r.ok) return;
+    const items = (await r.json()).filter(e => e.kind !== "decision" || e.status !== "done");
+    const answered = new Set([...decided, ...items.filter(e => e.kind.startsWith("approval_") && e.kind !== "approval_request").map(e => e.approval_id)]);
+    if (items.length) $("feed").innerHTML = items.map(e => feedCard(e, answered)).join("");
+  } catch (err) {}
+}
+$("feed").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-id]"); if (!b) return;
+  b.parentElement.querySelectorAll("button").forEach(x => x.disabled = true);
+  decided.add(b.dataset.id);
+  const passcode = "";
+  await fetch("/api/approval/" + b.dataset.id, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({approve: b.dataset.ok === "1", passcode})});
+  refreshFeed();
+});
+setInterval(refreshFeed, 2500); refreshFeed();
+fetch("/api/info").then(r => r.json()).then(i => { $("b-agent").textContent = i.agent === "bedrock" ? "agent: Claude on Bedrock" : "agent: offline router (no LLM)"; });
+if ("speechSynthesis" in window) speechSynthesis.getVoices();
+</script>
+</body>
+</html>

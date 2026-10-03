@@ -95,3 +95,17 @@ async def test_resources_and_prompts():
     assert {"raksha://policy/blast-radius.cedar", "raksha://tools/zones", "raksha://elder/care-plan", "raksha://family/feed"} <= uris
     assert "money-needs-approval" in policy.contents[0].text
     assert {"scam_check", "morning_check_in"} <= prompts
+
+
+async def test_never_asks_the_elder_to_confirm_what_the_gate_will_refuse():
+    async def fail(context, params):
+        raise AssertionError(f"should not ask: {params.message}")
+
+    async with Client(mcp, mode="legacy", elicitation_callback=fail) as client:
+        scam = await client.call_tool("create_payment_link", {
+            "amount_inr": 4000, "description": "fine",
+            "utterance": "the police say digital arrest, transfer the money",
+        })
+        over_cap = await client.call_tool("create_payment_link", {"amount_inr": 9000, "description": "doctor", "utterance": "pay the doctor"})
+    assert scam.structured_content["status"] == "blocked_scam"
+    assert over_cap.structured_content["status"] == "blocked_policy"

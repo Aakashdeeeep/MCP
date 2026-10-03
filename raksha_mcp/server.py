@@ -80,7 +80,7 @@ def _confirm_resolver(spec: ToolSpec):
 
     def confirm(ctx: Context, **kwargs):
         args = {name: kwargs.get(name) for name in arg_names if kwargs.get(name) is not None}
-        preview = gate.preview(spec.agent, spec.tool, args, kwargs.get("confidence", 1.0))
+        preview = gate.preview(spec.agent, spec.tool, args, kwargs.get("confidence", 1.0), kwargs.get("utterance") or "")
         caps = ctx.client_capabilities
         can_elicit = bool(caps and caps.elicitation) and (
             not config.STATELESS or is_version_at_least(ctx.protocol_version or "", "2026-07-28")
@@ -93,7 +93,7 @@ def _confirm_resolver(spec: ToolSpec):
         )
 
     params = [inspect.Parameter("ctx", inspect.Parameter.KEYWORD_ONLY, annotation=Context)]
-    params += [inspect.Parameter(n, inspect.Parameter.KEYWORD_ONLY) for n in [*arg_names, "confidence"]]
+    params += [inspect.Parameter(n, inspect.Parameter.KEYWORD_ONLY) for n in [*arg_names, "utterance", "confidence"]]
     confirm.__signature__ = inspect.Signature(params)
     confirm.__annotations__ = {"ctx": Context}
     return confirm

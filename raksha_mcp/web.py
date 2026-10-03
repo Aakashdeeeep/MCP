@@ -6,6 +6,7 @@ escaped: summaries and utterances come from a voice assistant, so they're untrus
 import hmac
 import html
 import json
+import re
 
 from raksha_mcp import config
 
@@ -94,12 +95,15 @@ def family_page():
         f"""
 <h1><span class=brand>Raksha</span> · family feed</h1>
 <p class=sub>Every request Alexa makes for {html.escape(config.ELDER_NAME)}, and what Raksha's policy decided. Updates live.</p>
+<div id=watch class="card urgent" style="display:none"><div class=row><strong id=watchtext>Money is paused after a scam alert.</strong>
+<button class="btn reject" id=lift style="margin-left:auto">I've called them · lift pause</button></div></div>
 <div id=feed><p class=sub>Waiting for the first request…</p></div>
 <script>
 const KEY = new URLSearchParams(location.search).get('key') || '';
 const ZONE = {{0:'Zone 0 · talk',1:'Zone 1 · autonomous',2:'Zone 2 · family approves',3:'Zone 3 · panic override'}};
 const KIND = {{decision:'Decision',alert:'URGENT alert',family_message:'Message to family',approval_request:'Approval needed',
-  approval_done:'Approved · done',approval_rejected:'Rejected',approval_expired:'Expired',approval_failed:'Approved · failed'}};
+  approval_done:'Approved · done',approval_rejected:'Rejected',approval_expired:'Expired',approval_failed:'Approved · failed',
+  scam_watch_on:'Money paused',scam_watch_off:'Pause lifted',account_linked:'Alexa linked'}};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
 function card(e) {{
   const z = e.effective_zone ?? e.zone;
@@ -127,7 +131,20 @@ async function refresh() {{
     if (items.length) document.getElementById('feed').innerHTML = items.map(card).join('');
   }} catch (err) {{}}
 }}
-refresh(); setInterval(refresh, 2000);
+async function refreshWatch() {{
+  try {{
+    const r = await fetch('/api/scam-watch' + (KEY ? '?key=' + encodeURIComponent(KEY) : '')); if (!r.ok) return;
+    const w = (await r.json()).scam_watch;
+    document.getElementById('watch').style.display = w ? 'block' : 'none';
+    if (w) document.getElementById('watchtext').textContent = 'Money is paused after a scam alert, until ' + new Date(w.until).toLocaleTimeString() + '.';
+  }} catch (err) {{}}
+}}
+document.getElementById('lift').onclick = async () => {{
+  const r = await fetch('/api/scam-watch' + (KEY ? '?key=' + encodeURIComponent(KEY) : ''), {{method: 'DELETE'}});
+  if (r.status === 403) alert('Open this page with your family key (?key=...) to lift the pause.');
+  refreshWatch(); refresh();
+}};
+refresh(); refreshWatch(); setInterval(() => {{ refresh(); refreshWatch(); }}, 2000);
 </script>{key_note and ''}""",
     )
 
@@ -184,17 +201,22 @@ async def _json(send, status, payload):
 
 class LearnBaseUrl:
     """ASGI middleware: on Lambda the Function URL isn't known until the stack exists, so the
-    approval links use the host the first request arrived on. PUBLIC_BASE_URL overrides it."""
+    approval links and OAuth issuer use the host the first request arrived on.
+
+    Only the Host header is trusted (AWS routes a Function URL by it), never X-Forwarded-Host,
+    and only for a Lambda Function URL host or one listed in RAKSHA_ALLOWED_HOSTS. Otherwise a
+    forged first request could point every approval email at an attacker's site.
+    PUBLIC_BASE_URL, when set, always wins."""
+
+    FUNCTION_URL_HOST = re.compile(r"^[a-z0-9]+\.lambda-url\.[a-z0-9-]+\.on\.aws$")
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and not config.PUBLIC_BASE_URL_FIXED:
-            headers = dict(scope.get("headers") or [])
-            host = headers.get(b"x-forwarded-host", headers.get(b"host", b"")).decode()
-            if host and not host.startswith(("127.0.0.1", "localhost")):
-                proto = headers.get(b"x-forwarded-proto", b"https").decode()
-                config.PUBLIC_BASE_URL = f"{proto}://{host}"
+            host = dict(scope.get("headers") or []).get(b"host", b"").decode().lower()
+            if self.FUNCTION_URL_HOST.match(host) or host in config.ALLOWED_HOSTS:
+                config.PUBLIC_BASE_URL = f"https://{host}"
                 config.PUBLIC_BASE_URL_FIXED = True
         await self.app(scope, receive, send)

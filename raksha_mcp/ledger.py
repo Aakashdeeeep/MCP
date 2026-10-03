@@ -77,3 +77,51 @@ def put_approval(approval, expect_status=None):
 def get_approval(approval_id):
     item = table().get_item(Key={"pk": f"APPROVAL#{approval_id}", "sk": "META"}).get("Item")
     return json.loads(item["data"]) if item else None
+
+
+# --- scam watch: protection that outlives a single request -----------------------------
+# After a scam alert, the scammer often calls back and coaches the elder to ask again in
+# harmless-sounding words. While the watch is on, nothing that moves money runs, whatever
+# is said. Only the family (with the passcode) can lift it early.
+
+def set_scam_watch(reason, minutes):
+    until = datetime.now(timezone.utc).timestamp() + minutes * 60
+    watch = {
+        "since": now_iso(),
+        "until": datetime.fromtimestamp(until, timezone.utc).isoformat(),
+        "reason": reason[:300],
+    }
+    table().put_item(Item={"pk": "STATE", "sk": "SCAM_WATCH", "data": json.dumps(watch), "ttl": int(until) + 60})
+    return watch
+
+
+def scam_watch():
+    """The active watch, or None."""
+    item = table().get_item(Key={"pk": "STATE", "sk": "SCAM_WATCH"}).get("Item")
+    if not item:
+        return None
+    watch = json.loads(item["data"])
+    if datetime.fromisoformat(watch["until"]) <= datetime.now(timezone.utc):
+        return None
+    return watch
+
+
+def clear_scam_watch():
+    table().delete_item(Key={"pk": "STATE", "sk": "SCAM_WATCH"})
+
+
+# --- pending money requests, for the approval-fatigue limit ------------------------------
+
+def add_pending_money(approval_id, expires_at):
+    expires = int(datetime.fromisoformat(expires_at).timestamp())
+    table().put_item(Item={"pk": "PENDING_MONEY", "sk": approval_id, "expires": expires, "ttl": expires + 60})
+
+
+def remove_pending_money(approval_id):
+    table().delete_item(Key={"pk": "PENDING_MONEY", "sk": approval_id})
+
+
+def pending_money_count():
+    now = int(datetime.now(timezone.utc).timestamp())
+    items = table().query(KeyConditionExpression=Key("pk").eq("PENDING_MONEY"))["Items"]
+    return sum(1 for item in items if int(item["expires"]) > now)

@@ -8,8 +8,12 @@ import re
 RULES = [
     (r"(send|pay|transfer).*(₹|rs\.?|rupees|\d{3,})|payment link",
      lambda t: ("create_payment_link", {"amount_inr": _amount(t), "description": t[:120]})),
+    (r"says (he|she) is|claims to be|calling from|is it really|really (my|him|her)|pretending",
+     lambda t: ("verify_caller", {"claimed_identity": t, **({"phone_number": n} if (n := _number(t)) else {})})),
     (r"otp|pin\b|kyc|scam|fraud|digital arrest|lottery|prize|police|cbi|rbi|customs|courier|bank.*(call|message|asked)|suspicious|someone called",
      lambda t: ("check_scam", {"what_happened": t})),
+    (r"how is (mom|mum|amma|she|kamala|my mother)|weekly (summary|update)|how has (she|mom) been",
+     lambda t: ("family_summary", {"days": 7})),
     (r"chest pain|fell|fallen|can't breathe|cannot breathe|breathing|faint|dizzy|ambulance|emergency",
      lambda t: ("report_emergency", {"description": t})),
     (r"order|refill|run(ning)? out",
@@ -96,6 +100,11 @@ def _vitals(text):
     number = re.search(r"(\d{2,3})", lowered)
     kind = "pulse" if "pulse" in lowered else "temperature" if "temperature" in lowered else "weight" if "weight" in lowered else "blood_sugar"
     return {"vital_type": kind, "value": number.group(1) if number else "0"}
+
+
+def _number(text):
+    match = re.search(r"(\+?\d[\d\s-]{8,}\d)", text)
+    return match.group(1) if match else None
 
 
 def _approval_id(text):

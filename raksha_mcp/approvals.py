@@ -6,6 +6,7 @@ in the ledger, and the family's Approve runs the task directly, with approval=tr
 the same agent code and the same Cedar policy. The elder hears the result the next time
 they ask ("Alexa, did my family approve the medicine?" -> check_request_status).
 """
+import hmac
 from datetime import datetime, timezone
 
 from raksha_mcp import agents, config, ledger, voice
@@ -22,14 +23,24 @@ def current(approval_id):
         if datetime.fromisoformat(approval["expires_at"]) < datetime.now(timezone.utc):
             expired = {**approval, "status": "expired"}
             if ledger.put_approval(expired, expect_status="pending"):
+                ledger.remove_pending_money(approval_id)
                 ledger.record("approval_expired", f"Expired: {approval['summary_en']}", approval_id=approval_id)
             approval = ledger.get_approval(approval_id)
     return approval
 
 
+def lift_scam_watch(passcode=""):
+    """Only the family can lift the money pause, never the elder's voice (a scammer can coach that)."""
+    if config.APPROVAL_PASSCODE and not hmac.compare_digest(passcode or "", config.APPROVAL_PASSCODE):
+        raise ApprovalError("Wrong family passcode.")
+    if ledger.scam_watch():
+        ledger.clear_scam_watch()
+        ledger.record("scam_watch_off", "Family lifted the money pause")
+
+
 def decide(approval_id, approve, passcode=""):
     """Record the family's decision; on approve, run the task. Returns the updated approval."""
-    if config.APPROVAL_PASSCODE and passcode != config.APPROVAL_PASSCODE:
+    if config.APPROVAL_PASSCODE and not hmac.compare_digest(passcode or "", config.APPROVAL_PASSCODE):
         raise ApprovalError("Wrong family passcode.")
     approval = current(approval_id)
     if approval is None:
@@ -37,11 +48,16 @@ def decide(approval_id, approve, passcode=""):
     if approval["status"] != "pending":
         raise ApprovalError(f"Already {approval['status']}.")
 
+    if approve and approval.get("moves_money") and ledger.scam_watch():
+        # Asked for before the scam alert, maybe by the same caller: lift the pause first.
+        raise ApprovalError("Money is paused after a scam alert. Call them, then lift the pause before approving.")
+
     decided_at = datetime.now(timezone.utc).isoformat()
     if not approve:
         rejected = {**approval, "status": "rejected", "decided_at": decided_at}
         if not ledger.put_approval(rejected, expect_status="pending"):
             raise ApprovalError("Someone else already answered this request.")
+        ledger.remove_pending_money(approval_id)
         ledger.record("approval_rejected", f"Rejected: {approval['summary_en']}", approval_id=approval_id)
         return rejected
 
@@ -49,6 +65,7 @@ def decide(approval_id, approve, passcode=""):
     running = {**approval, "status": "running", "decided_at": decided_at}
     if not ledger.put_approval(running, expect_status="pending"):
         raise ApprovalError("Someone else already answered this request.")
+    ledger.remove_pending_money(approval_id)
 
     task = {
         "task_id": f"approval-{approval_id}",

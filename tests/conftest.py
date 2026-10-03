@@ -14,3 +14,16 @@ import raksha_mcp  # noqa: E402,F401 - starts simulated AWS before any Raksha mo
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def fresh_safety_state():
+    """Scam watch and pending money requests are global state; every test starts clean."""
+    from boto3.dynamodb.conditions import Key
+
+    from raksha_mcp import ledger
+
+    ledger.clear_scam_watch()
+    for item in ledger.table().query(KeyConditionExpression=Key("pk").eq("PENDING_MONEY"))["Items"]:
+        ledger.remove_pending_money(item["sk"])
+    yield

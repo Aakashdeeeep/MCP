@@ -179,3 +179,114 @@ def test_bedrock_classifier_shape_is_validated(monkeypatch):
     monkeypatch.setattr(config, "BEDROCK_ENABLED", True)
     monkeypatch.setattr(anthropic, "AnthropicBedrockMantle", lambda **kw: SimpleNamespace(messages=FakeMessages()))
     assert voice_agent.classify_with_bedrock("anything") is None  # an invalid verdict is ignored
+
+
+# --- protection across turns ---------------------------------------------------------
+
+def test_scam_callback_without_keywords_is_still_blocked():
+    """Turn 1: the scam is reported. Turn 2: the scammer calls back and coaches the elder to ask
+    for a 'normal' payment with no trigger words. Money stays paused."""
+    first = gate.handle("raksha-voice", "check_scam", {"what_happened": "caller wants my OTP"}, "caller wants my OTP")
+    assert first["status"] == "alerted"
+    assert ledger.scam_watch() is not None
+
+    second = gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 3000, "description": "my nephew's fees"}, "please send 3000 for my nephew's fees")
+    assert second["status"] == "blocked_scam_watch"
+    assert second["tripwire"] == []  # no keywords this time: the watch alone stopped it
+    assert "approval_id" not in second
+
+    harmless = gate.handle("care-coordinator", "check_weather", {}, "is it raining")
+    assert harmless["status"] == "done"  # everything else keeps working
+
+
+def test_only_family_lifts_the_pause(monkeypatch):
+    from raksha_mcp import config
+
+    gate.handle("raksha-voice", "check_scam", {"what_happened": "KYC update or account blocked"}, "")
+    monkeypatch.setattr(config, "APPROVAL_PASSCODE", "1357")
+    with pytest.raises(approvals.ApprovalError):
+        approvals.lift_scam_watch("0000")
+    approvals.lift_scam_watch("1357")
+    assert ledger.scam_watch() is None
+    out = gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 500, "description": "doctor fee"}, "pay the doctor")
+    assert out["status"] == "pending_family_approval"
+
+
+def test_request_made_before_the_scam_cannot_be_approved_during_it():
+    early = gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 900, "description": "electricity bill"}, "pay the bill")
+    assert early["status"] == "pending_family_approval"
+    gate.handle("raksha-voice", "check_scam", {"what_happened": "he wants me to install AnyDesk"}, "")
+    with pytest.raises(approvals.ApprovalError, match="paused"):
+        approvals.decide(early["approval_id"], approve=True)
+    assert approvals.decide(early["approval_id"], approve=False)["status"] == "rejected"
+
+
+def test_approval_fatigue_limit():
+    """A flood of small requests can't wear the family down: two may wait, the third is refused."""
+    statuses = [
+        gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 400 + i, "description": f"item {i}"}, "pay")["status"]
+        for i in range(3)
+    ]
+    assert statuses == ["pending_family_approval", "pending_family_approval", "blocked_too_many"]
+
+
+# --- trusted contacts and the family summary --------------------------------------------
+
+def test_verify_caller_never_vouches_for_a_voice():
+    unknown_number = gate.handle("raksha-voice", "verify_caller", {"claimed_identity": "my grandson Rahul", "phone_number": "70000 12345"}, "")
+    assert unknown_number["result"]["match"] == "name_only"
+    assert "+91 99890 11223" in unknown_number["speech"] and "Don't send any money" in unknown_number["speech"]
+
+    saved = gate.handle("raksha-voice", "verify_caller", {"claimed_identity": "Priya", "phone_number": "+91-98480-22338"}, "")
+    assert saved["result"]["match"] == "number"
+
+    stranger = gate.handle("raksha-voice", "verify_caller", {"claimed_identity": "Mr Sharma from customs"}, "")
+    assert stranger["result"]["match"] == "none"
+
+
+def test_verify_caller_still_trips_on_scam_words():
+    out = gate.handle("raksha-voice", "verify_caller", {"claimed_identity": "SBI officer asking for my OTP"}, "SBI officer wants my OTP")
+    assert [a["tool"] for a in out["alerts"]] == ["report_scam"]
+
+
+def test_family_summary_counts_what_happened():
+    gate.handle("health-log", "log_vitals", {"vital_type": "blood_sugar", "value": "142"}, "")
+    gate.handle("raksha-voice", "check_scam", {"what_happened": "they won't stop asking for my OTP"}, "")
+    out = gate.handle("raksha-voice", "family_summary", {"days": 7}, "how is mom doing")
+    data = out["result"]
+    assert data["adherence"]["expected"] > 0
+    assert data["latest_vitals"]["blood_sugar"] == "142"
+    assert data["alerts"] and data["scam_watch"]
+    assert "Money is paused" in out["speech"]
+
+
+@pytest.mark.parametrize("said, signal", [
+    ("They said I won a lucky draw car, I just have to pay the processing fee", "fake_prize_fee"),
+    ("He wants me to buy Google Play cards and read him the codes", "gift_card_payment"),
+    ("Your grandson had an accident and is with the police, send money right now", "relative_in_trouble"),
+    ("Your electricity will be disconnected tonight unless you pay", "disconnection_threat"),
+    ("A parcel in your name has drugs, customs has seized it", "parcel_customs"),
+    ("He said don't tell your family about this investment", "secrecy_demand"),
+    ("Bank man wants my card number and expiry date", "card_details"),
+    ("ओटीपी बताइए", "otp_request"),  # Raksha's original Hindi patterns still apply
+])
+def test_english_scam_shapes_alert_the_family(said, signal):
+    out = gate.handle("raksha-voice", "check_scam", {"what_happened": said}, said)
+    assert signal in out["tripwire"]
+    assert out["status"] == "alerted"
+
+
+@pytest.mark.parametrize("said", [
+    "My grandson won a cricket prize at school",
+    "Did I take my blood pressure tablet?",
+    "Please send my daughter a message that I reached the temple",
+    "My daughter is in hospital, please send her a message that I'm praying for her",
+    "My son called from the police station where he works, he'll be late",
+])
+def test_everyday_sentences_do_not_alarm(said):
+    assert gate.handle("raksha-voice", "check_scam", {"what_happened": said}, said)["tripwire"] == []
+
+
+def test_english_emergency_shapes():
+    out = gate.handle("care-coordinator", "check_weather", {}, "I fell in the bathroom and can't get up")
+    assert [a["tool"] for a in out["alerts"]] == ["report_emergency"]

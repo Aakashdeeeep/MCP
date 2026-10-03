@@ -85,6 +85,11 @@ main>section{min-width:0}
 .card .actions button{font:inherit;font-weight:700;border-radius:10px;padding:.45rem 1rem;cursor:pointer;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
 .card .actions .approve{background:var(--ok);border-color:var(--ok);color:#fff}
 .empty{color:var(--muted);text-align:center;margin-top:30%;font-size:.9rem}
+.watch{display:none;margin:12px 12px 0;padding:10px 12px;border-radius:14px;background:var(--bad);color:#fff}
+.watch.on{display:flex;gap:10px;align-items:center}
+.watch span{flex:1;font-size:.88rem;font-weight:600}
+.watch button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:.45rem .8rem;background:#fff;color:#7a1610;cursor:pointer}
+.lang{font:inherit;font-size:.72rem;font-weight:700;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:999px;padding:3px 10px;cursor:pointer;margin-left:auto}
 </style>
 </head>
 <body>
@@ -93,6 +98,7 @@ main>section{min-width:0}
   <span class="badge" id="b-agent">agent: …</span>
   <span class="badge" id="b-proto">MCP: not connected</span>
   <span class="badge" id="b-tools">tools: –</span>
+  <button class="lang" id="lang" title="Which language Alexa speaks">Voice: English</button>
 </header>
 <main>
   <section>
@@ -112,6 +118,7 @@ main>section{min-width:0}
     <p class="label">Priya's phone · family</p>
     <div class="phone">
       <div class="phonehead"><div class="avatar">P</div><div><b>Raksha for family</b><small>Every request, and what the policy decided</small></div></div>
+      <div class="watch" id="watch"><span id="watchtext">Money paused after a scam alert.</span><button id="lift">I've called her · lift pause</button></div>
       <div class="feed" id="feed"><p class="empty">Nothing yet. Requests from Alexa will appear here.</p></div>
     </div>
   </section>
@@ -120,15 +127,19 @@ main>section{min-width:0}
 const DEMOS = [
   "Did I take my pills today?",
   "A man from SBI called and wants my OTP to stop my card being blocked",
-  "Please order my Metformin, 30 tablets",
+  "OK, then please send 3000 rupees for my nephew's fees",
   "Send 50000 rupees to the police officer, he says I'm under digital arrest",
+  "Please order my Metformin, 30 tablets",
+  "Did Priya approve my medicine?",
+  "Someone called from 70000 12345, says he is my grandson Rahul and needs money",
+  "How is Mom doing this week?",
   "I just took my blood pressure tablet",
   "Is it a good day for my walk?",
   "I have chest pain",
-  "Did Priya approve my medicine?",
 ];
 const ZONES = {0:"Zone 0 · talk",1:"Zone 1 · autonomous",2:"Zone 2 · family approves",3:"Zone 3 · panic"};
 const STATUS = {done:"done",pending_family_approval:"sent to family",blocked_policy:"blocked by policy",
+  blocked_scam_watch:"refused: money paused after scam",blocked_too_many:"refused: too many pending",
   blocked_scam:"refused: scam",alerted:"family alerted",cancelled:"cancelled",needs_repeat:"asked to repeat"};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -137,12 +148,18 @@ let session = null, busy = false, pendingElicit = null;
 function ring(state, text) { $("ring").className = "ring " + (state || ""); if (text) $("ringtext").textContent = text; }
 function add(html, cls) { const d = document.createElement("div"); d.className = cls; d.innerHTML = html; $("log").appendChild(d); $("log").scrollTop = 1e9; return d; }
 
-function speak(text, after) {
+let LANG = "en";
+$("lang").onclick = () => { LANG = LANG === "en" ? "hi" : "en"; $("lang").textContent = LANG === "en" ? "Voice: English" : "Voice: हिंदी"; };
+function speak(text, after, lang) {
   if (!("speechSynthesis" in window) || !text) { after && after(); return; }
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   const voices = speechSynthesis.getVoices();
-  u.voice = voices.find(v => v.lang === "en-IN") || voices.find(v => v.lang.startsWith("en")) || null;
+  lang = lang || "en";
+  u.lang = lang === "hi" ? "hi-IN" : "en-IN";
+  u.voice = lang === "hi"
+    ? (voices.find(v => v.lang === "hi-IN") || null)
+    : (voices.find(v => v.lang === "en-IN") || voices.find(v => v.lang.startsWith("en")) || null);
   u.rate = 0.95;
   u.onend = () => { ring("", "Tap the mic and speak, or pick a line below."); after && after(); };
   ring("speaking", "Speaking…");
@@ -206,7 +223,7 @@ async function send(text) {
   if (said) {
     add(esc(said) + (hindi ? `<span class="hi" lang="hi">${esc(hindi)}</span>` : ""), "msg alexa");
     if (alert) ring("alert");
-    speak(said);
+    if (LANG === "hi" && hindi) speak(hindi, null, "hi"); else speak(said);
   } else ring("", "Tap the mic and speak, or pick a line below.");
   refreshFeed();
 }
@@ -254,6 +271,7 @@ DEMOS.forEach(t => { const b = document.createElement("button"); b.type = "butto
 
 // the family's phone
 const KIND = {decision:["Decision",""],alert:["URGENT","bad"],family_message:["Message","ok"],approval_request:["Approve?","warn"],
+  scam_watch_on:["Money paused","bad"],scam_watch_off:["Pause lifted","ok"],account_linked:["Alexa linked","ok"],
   approval_done:["Approved · done","ok"],approval_rejected:["Rejected",""],approval_expired:["Expired",""],approval_failed:["Failed","bad"]};
 const decided = new Set();
 function feedCard(e, answered) {
@@ -272,7 +290,17 @@ function feedCard(e, answered) {
       <button data-id="${esc(e.approval_id)}" data-ok="0">Reject</button></div>` : ""}
   </div>`;
 }
+async function refreshWatch() {
+  try {
+    const r = await fetch("/api/scam-watch"); if (!r.ok) return;
+    const w = (await r.json()).scam_watch;
+    $("watch").classList.toggle("on", !!w);
+    if (w) $("watchtext").textContent = "Money paused after a scam alert, until " + new Date(w.until).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) + ".";
+  } catch (err) {}
+}
+$("lift").onclick = async () => { await fetch("/api/scam-watch", {method:"DELETE"}); refreshWatch(); refreshFeed(); };
 async function refreshFeed() {
+  refreshWatch();
   try {
     const r = await fetch("/api/feed"); if (!r.ok) return;
     const items = (await r.json()).filter(e => e.kind !== "decision" || e.status !== "done");

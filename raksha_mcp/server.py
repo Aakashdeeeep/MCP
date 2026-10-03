@@ -6,6 +6,7 @@ On AWS:        the same ASGI app behind Lambda Web Adapter (infra/template.yaml)
 Besides /mcp it serves the family's side: /approval/<id> (approve or reject a Zone 2
 request), /family (live feed of every gate decision) and /health.
 """
+import hmac
 import inspect
 import json
 from typing import Annotated, Any
@@ -270,6 +271,21 @@ async def approval_page(request: Request) -> Response:
     return HTMLResponse(web.approval_page(approval))
 
 
+@mcp.custom_route("/api/scam-watch", methods=["GET", "DELETE"], include_in_schema=False)
+async def scam_watch_api(request: Request) -> Response:
+    """GET: is money paused? DELETE: lift the pause. Both need the family passcode as ?key=."""
+    if config.APPROVAL_PASSCODE and request.method == "GET" and not hmac.compare_digest(
+        request.query_params.get("key", ""), config.APPROVAL_PASSCODE
+    ):
+        return JSONResponse({"error": "family key required"}, status_code=401)
+    if request.method == "DELETE":
+        try:
+            await anyio.to_thread.run_sync(approvals.lift_scam_watch, request.query_params.get("key", ""))
+        except approvals.ApprovalError as error:
+            return JSONResponse({"error": str(error)}, status_code=403)
+    return JSONResponse({"scam_watch": await anyio.to_thread.run_sync(ledger.scam_watch)})
+
+
 @mcp.custom_route("/family", methods=["GET"], include_in_schema=False)
 async def family_page(request: Request) -> Response:
     return HTMLResponse(web.family_page())
@@ -277,7 +293,7 @@ async def family_page(request: Request) -> Response:
 
 @mcp.custom_route("/api/feed", methods=["GET"], include_in_schema=False)
 async def feed_api(request: Request) -> Response:
-    if config.APPROVAL_PASSCODE and request.query_params.get("key") != config.APPROVAL_PASSCODE:
+    if config.APPROVAL_PASSCODE and not hmac.compare_digest(request.query_params.get("key", ""), config.APPROVAL_PASSCODE):
         return JSONResponse({"error": "family key required"}, status_code=401)
     entries = await anyio.to_thread.run_sync(ledger.feed)
     return JSONResponse(entries)

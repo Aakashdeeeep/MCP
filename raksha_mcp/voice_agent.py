@@ -10,6 +10,7 @@ the same tool registry, so the gate and the policy treat them exactly like the o
   check_request_status  "Did my family approve the medicine?" Zone 1, read-only.
 """
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 from boto3.dynamodb.conditions import Key
@@ -18,13 +19,12 @@ from raksha_common import adherence
 from raksha_common.agent import PATIENT_ID, result, run_tool
 from raksha_common.tool_registry import AGENTS
 
-import tripwire
-from raksha_mcp import config, ledger
+from raksha_mcp import config, ledger, tripwire_en
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
 AGENTS["raksha-voice"] = {
-    "description": "Voice-assistant helpers added for Alexa+: medicine check, scam check, approval status.",
+    "description": "Voice-assistant helpers added for Alexa+: medicines, scam and caller checks, approvals, family summary.",
     "tools": {
         "todays_medicines": {
             "zone": 1,
@@ -47,8 +47,34 @@ AGENTS["raksha-voice"] = {
             "description": "Check whether the family has approved or rejected an earlier request.",
             "args": {"approval_id": {"type": "string", "required": True}},
         },
+        "verify_caller": {
+            "zone": 1,
+            "read_only": True,
+            "returns": ["match", "call_back_number"],
+            "description": "Check a caller against the family's trusted contacts and say how to call them back safely.",
+            "args": {
+                "claimed_identity": {"type": "string", "required": True},
+                "phone_number": {"type": "string", "required": False},
+            },
+        },
+        "family_summary": {
+            "zone": 1,
+            "read_only": True,
+            "returns": ["adherence", "alerts"],
+            "description": "A short summary for the family: medicines, readings, alerts and requests over recent days.",
+            "args": {"days": {"type": "integer", "required": False}},
+        },
     },
 }
+
+# The family's trusted contacts (demo data; set RAKSHA_TRUSTED_CONTACTS to a JSON list to change).
+# A real bank, police station or relative can always be called back on a number like these.
+DEFAULT_TRUSTED_CONTACTS = [
+    {"name": "Priya", "relation": "daughter", "phone": "+91 98480 22338", "aliases": ["priya", "daughter", "beti"]},
+    {"name": "Rahul", "relation": "grandson", "phone": "+91 99890 11223", "aliases": ["rahul", "grandson", "pota", "nati"]},
+    {"name": "Dr. Rao's clinic", "relation": "doctor", "phone": "+91 40 2354 1111", "aliases": ["doctor", "dr rao", "clinic"]},
+    {"name": "SBI customer care", "relation": "bank", "phone": "1800 1234", "aliases": ["sbi", "state bank", "bank"]},
+]
 
 
 def todays_medicines(args, event):
@@ -149,7 +175,7 @@ SUSPICIOUS_REPLY_HI = (
 
 def check_scam(args, event):
     text = args["what_happened"]
-    signals = sorted(set(tripwire.scam_signals(text)) | set(tripwire.scam_signals(event.get("transcript", ""))))
+    signals = sorted(set(tripwire_en.scam_signals(text)) | set(tripwire_en.scam_signals(event.get("transcript", ""))))
     model = classify_with_bedrock(text)
     if signals:
         verdict, source = "scam", "tripwire"
@@ -206,7 +232,104 @@ def check_request_status(args, event):
     return result(replies.get(status, "स्थिति साफ़ नहीं है।"), data)
 
 
+def trusted_contacts():
+    raw = os.environ.get("RAKSHA_TRUSTED_CONTACTS")
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            print("RAKSHA_TRUSTED_CONTACTS is not valid JSON; using the demo contacts")
+    return DEFAULT_TRUSTED_CONTACTS
+
+
+def _digits(number):
+    digits = "".join(ch for ch in (number or "") if ch.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+def verify_caller(args, event):
+    """Never says "yes, that's really them" from a voice: it says whether the NUMBER is a
+    saved one, and otherwise gives the saved number to call back on."""
+    claimed = args["claimed_identity"].lower()
+    number = _digits(args.get("phone_number"))
+    contacts = trusted_contacts()
+    by_number = next((c for c in contacts if number and _digits(c["phone"]) == number), None)
+    by_name = next((c for c in contacts if any(alias in claimed for alias in c.get("aliases", [])) or c["name"].lower() in claimed), None)
+
+    if by_number:
+        data = {"match": "number", "contact": by_number["name"], "relation": by_number["relation"], "call_back_number": by_number["phone"]}
+        return result(f"यह नंबर आपकी सूची में {by_number['name']} के नाम से सेव है।", data)
+    if by_name:
+        data = {"match": "name_only", "contact": by_name["name"], "relation": by_name["relation"],
+                "call_back_number": by_name["phone"], "number_checked": bool(number)}
+        return result(
+            f"यह नंबर {by_name['name']} का सेव किया हुआ नंबर नहीं है। फ़ोन काटिए और {by_name['phone']} पर ख़ुद फ़ोन कीजिए। पैसे मत भेजिए।",
+            data,
+        )
+    return result(
+        "यह व्यक्ति आपकी भरोसेमंद सूची में नहीं है। कोई पैसा या OTP मत दीजिए, पहले परिवार से बात कीजिए।",
+        {"match": "none", "call_back_number": None},
+    )
+
+
+def family_summary(args, event):
+    days = max(1, min(int(args.get("days") or 7), 30))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    plan = adherence.care_plans_table.get_item(Key={"patient_id": PATIENT_ID}).get("Item")
+    logs = adherence.adherence_table.query(
+        KeyConditionExpression=Key("patient_id").eq(PATIENT_ID) & Key("timestamp").gte(since.isoformat())
+    )["Items"]
+    summary = adherence.summarize(plan, logs, days) if plan else None
+
+    most_missed = None
+    if plan:
+        missed = {}
+        for medicine in plan.get("medicines") or []:
+            expected = len(medicine.get("times") or []) * min(days, max(1, (datetime.now(timezone.utc) - datetime.fromisoformat(plan["created_at"])).days + 1))
+            taken = sum(1 for log in logs if log.get("taken") and log["medicine"].lower() == medicine["name"].lower())
+            missed[medicine["name"]] = max(0, expected - taken)
+        name, count = max(missed.items(), key=lambda item: item[1], default=(None, 0))
+        most_missed = {"medicine": name, "missed": count} if count else None
+
+    vitals_table = boto3_table(os.environ.get("VITALS_TABLE", "VitalsLog"))
+    readings = vitals_table.query(
+        KeyConditionExpression=Key("patient_id").eq(PATIENT_ID) & Key("timestamp").gte(since.isoformat()),
+        ScanIndexForward=False,
+    )["Items"]
+    latest = {}
+    for reading in readings:
+        latest.setdefault(reading["vital_type"], reading["value"])
+
+    feed = [entry for entry in ledger.feed(limit=60) if entry["at"] >= since.isoformat()]
+    alerts = [entry for entry in feed if entry["kind"] == "alert"]
+    waiting = [entry for entry in feed if entry["kind"] == "approval_request"]
+    answered = {entry.get("approval_id") for entry in feed if entry["kind"].startswith("approval_") and entry["kind"] != "approval_request"}
+    pending = [entry for entry in waiting if entry.get("approval_id") not in answered]
+
+    data = {
+        "days": days,
+        "adherence": summary,
+        "most_missed": most_missed,
+        "latest_vitals": latest,
+        "alerts": [{"title": a["title"], "at": a["at"]} for a in alerts],
+        "pending_approvals": len(pending),
+        "scam_watch": ledger.scam_watch(),
+    }
+    hindi = f"पिछले {days} दिनों का हाल: " + (
+        f"{summary['expected']} में से {summary['taken']} खुराक ली गईं। " if summary else "दवाइयों की सूची नहीं मिली। "
+    ) + (f"{len(alerts)} चेतावनी आई। " if alerts else "कोई चेतावनी नहीं आई। ")
+    return result(hindi, data)
+
+
+def boto3_table(name):
+    import boto3
+
+    return boto3.resource("dynamodb").Table(name)
+
+
 TOOLS = {
+    "verify_caller": verify_caller,
+    "family_summary": family_summary,
     "todays_medicines": todays_medicines,
     "check_scam": check_scam,
     "check_request_status": check_request_status,

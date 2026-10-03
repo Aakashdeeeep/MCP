@@ -35,6 +35,9 @@ AGENT = os.environ.get("SIM_AGENT", "bedrock" if os.environ.get("RAKSHA_BEDROCK"
 MODEL_ID = os.environ.get("SIM_MODEL_ID", "anthropic.claude-opus-5-5")
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 SERVER_BASE = MCP_URL.rsplit("/mcp", 1)[0]
+# The family passcode, so the simulator's phone panel works against a deployed server too.
+# The simulator is a local demo tool: don't expose it publicly with this set.
+FAMILY_KEY = os.environ.get("SIM_FAMILY_KEY", "")
 STATIC = Path(__file__).parent / "static"
 MAX_TOOL_ROUNDS = 6
 
@@ -175,7 +178,15 @@ async def answer_elicitation(request: Request) -> Response:
 
 async def proxy_feed(request: Request) -> Response:
     async with httpx2.AsyncClient(timeout=10) as http:
-        upstream = await http.get(f"{SERVER_BASE}/api/feed", params=dict(request.query_params))
+        upstream = await http.get(f"{SERVER_BASE}/api/feed", params={"key": request.query_params.get("key") or FAMILY_KEY})
+    return Response(upstream.content, status_code=upstream.status_code, media_type="application/json")
+
+
+async def proxy_scam_watch(request: Request) -> Response:
+    """The family panel's banner: is money paused, and the button that lifts it."""
+    params = {"key": request.query_params.get("key") or FAMILY_KEY}
+    async with httpx2.AsyncClient(timeout=10) as http:
+        upstream = await http.request(request.method, f"{SERVER_BASE}/api/scam-watch", params=params)
     return Response(upstream.content, status_code=upstream.status_code, media_type="application/json")
 
 
@@ -185,7 +196,7 @@ async def proxy_decision(request: Request) -> Response:
     async with httpx2.AsyncClient(timeout=30) as http:
         upstream = await http.post(
             f"{SERVER_BASE}/approval/{request.path_params['approval_id']}",
-            data={"decision": "approve" if body.get("approve") else "reject", "passcode": body.get("passcode", "")},
+            data={"decision": "approve" if body.get("approve") else "reject", "passcode": body.get("passcode") or FAMILY_KEY},
             headers={"Accept": "application/json"},
         )
     if upstream.headers.get("content-type", "").startswith("application/json"):
@@ -208,6 +219,7 @@ app = Starlette(
         Route("/api/turn", turn, methods=["POST"]),
         Route("/api/elicit/{elicitation_id}", answer_elicitation, methods=["POST"]),
         Route("/api/feed", proxy_feed),
+        Route("/api/scam-watch", proxy_scam_watch, methods=["GET", "DELETE"]),
         Route("/api/approval/{approval_id}", proxy_decision, methods=["POST"]),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ]

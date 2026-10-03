@@ -47,3 +47,10 @@ REQUIRE_AUTH = os.environ.get("RAKSHA_REQUIRE_AUTH", "1" if (not LOCAL or MCP_AU
 OAUTH_REDIRECT_HOSTS = [h.strip() for h in os.environ.get("OAUTH_REDIRECT_HOSTS", "").split(",") if h.strip()]
 # Browser origins allowed to call /mcp (server-to-server calls send no Origin and pass).
 ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ.get("RAKSHA_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
+# After a scam alert, block every money-moving tool for this long (the family can lift it).
+SCAM_WATCH_MINUTES = int(os.environ.get("SCAM_WATCH_MINUTES", "120"))
+# Approval fatigue: at most this many money requests may wait for the family at once.
+MAX_PENDING_MONEY = int(os.environ.get("MAX_PENDING_MONEY", "2"))
+# Extra public hostnames (custom domain in front of the Function URL) trusted for links.
+ALLOWED_HOSTS = [h.strip().lower() for h in os.environ.get("RAKSHA_ALLOWED_HOSTS", "").split(",") if h.strip()]

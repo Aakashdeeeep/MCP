@@ -6,9 +6,9 @@ flowchart LR
     Alexa -- "MCP 2025-11-25<br/>Streamable HTTP<br/>OAuth bearer" --> Guard
 
     subgraph Lambda["AWS Lambda (container, Web Adapter, Function URL)"]
-        Guard[McpGuard<br/>auth + Origin] --> MCP[MCPServer<br/>19 tools · 4 resources · 2 prompts]
+        Guard[McpGuard<br/>auth + Origin] --> MCP[MCPServer<br/>21 tools · 4 resources · 2 prompts]
         MCP -- "Zone 2: elicitation" --> Alexa
-        MCP --> Gate{{Gate<br/>registry → tripwire → scam lock<br/>→ confidence floor → zone → Cedar pre-check}}
+        MCP --> Gate{{Gate<br/>registry → tripwire → scam lock → scam watch<br/>→ fatigue limit → confidence floor → zone → Cedar pre-check}}
         Gate -- "Zone 0/1" --> Agents[Raksha agents<br/>run_tool → Cedar]
         Gate -- "Zone 3, never waits" --> Shield[scam-shield agent]
         Gate -- "Zone 2" --> Ledger[(Ledger<br/>approvals · feed · OAuth)]

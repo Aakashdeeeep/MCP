@@ -140,6 +140,36 @@ def done_line(tool, args, data):
             "failed": "Your family approved it, but it couldn't be completed. I've let them know.",
             "unknown": "I couldn't find that request.",
         }.get(data.get("status"), "Your family approved it and it's done.")
+    if tool == "verify_caller":
+        if data.get("match") == "number":
+            return f"That number is saved as {data['contact']}, your {data['relation']}. Even so, never share an OTP or PIN on a call."
+        if data.get("match") == "name_only":
+            return (
+                f"I can't confirm that's really {data['contact']}. Please hang up and call {data['contact']} back "
+                f"yourself on the saved number, {data['call_back_number']}. Don't send any money until you've spoken to them."
+            )
+        return (
+            "That person isn't in your family's trusted list. Please don't give them money, an OTP or any details. "
+            "Let's check with your family first."
+        )
+    if tool == "family_summary":
+        parts = []
+        a = data.get("adherence")
+        if a:
+            parts.append(f"In the last {data['days']} days, {a['taken']} of {a['expected']} medicine doses were taken.")
+        if data.get("most_missed"):
+            m = data["most_missed"]
+            parts.append(f"{m['medicine']} is the one most often missed, {m['missed']} times.")
+        vitals = data.get("latest_vitals") or {}
+        if vitals:
+            parts.append("Latest readings: " + _join(f"{VITAL_NAMES.get(k, k)} {v}" for k, v in vitals.items()) + ".")
+        alerts = data.get("alerts") or []
+        parts.append(f"{len(alerts)} safety alert{'s' if len(alerts) != 1 else ''}." if alerts else "No safety alerts.")
+        if data.get("pending_approvals"):
+            parts.append(f"{data['pending_approvals']} request{'s' if data['pending_approvals'] != 1 else ''} waiting for your approval.")
+        if data.get("scam_watch"):
+            parts.append("Money is paused right now after a scam alert.")
+        return " ".join(parts)
     if tool in ("reply", "ask_followup"):
         return "I'm here with you."
     return "Done."

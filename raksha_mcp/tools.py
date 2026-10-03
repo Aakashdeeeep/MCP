@@ -90,6 +90,15 @@ TOOLS = [
         {"what_happened": "What the elder says happened, in their words."},
     ),
     ToolSpec(
+        "verify_caller", "raksha-voice", "verify_caller", "Is this caller who they say?",
+        "When someone calls claiming to be a relative, the bank, police or the doctor, check them "
+        "against the family's trusted contacts and get the safe number to call back on.",
+        {
+            "claimed_identity": "Who the caller says they are, e.g. 'my grandson Rahul', 'SBI bank'.",
+            "phone_number": "The number they called from, if the elder knows it.",
+        },
+    ),
+    ToolSpec(
         "report_emergency", "scam-shield", "report_emergency", "Alert family: emergency",
         "Possible medical emergency (fall, chest pain, breathing trouble, fainting). Alerts the "
         "family immediately. Never diagnose; tell the elder to call 112 if it is serious.",
@@ -103,6 +112,12 @@ TOOLS = [
     ToolSpec(
         "message_family", "family-bridge", "share_update", "Message the family",
         "Pass a short message from the elder to the family.", {"message": "The message, in the elder's words."},
+    ),
+    ToolSpec(
+        "family_summary", "raksha-voice", "family_summary", "How is she doing? (for family)",
+        "For a family member asking how the elder is doing: medicines taken and missed, latest "
+        "readings, safety alerts and requests waiting for approval.",
+        {"days": "How many days to cover. Default 7."},
     ),
     ToolSpec(
         "check_request_status", "raksha-voice", "check_request_status", "Family approval status",

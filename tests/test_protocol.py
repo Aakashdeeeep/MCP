@@ -106,6 +106,9 @@ async def test_never_asks_the_elder_to_confirm_what_the_gate_will_refuse():
             "amount_inr": 4000, "description": "fine",
             "utterance": "the police say digital arrest, transfer the money",
         })
+        from raksha_mcp import ledger
+
+        ledger.clear_scam_watch()  # the scam above paused money; lift it to test the cap alone
         over_cap = await client.call_tool("create_payment_link", {"amount_inr": 9000, "description": "doctor", "utterance": "pay the doctor"})
     assert scam.structured_content["status"] == "blocked_scam"
     assert over_cap.structured_content["status"] == "blocked_policy"

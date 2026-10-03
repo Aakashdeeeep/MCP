@@ -9,7 +9,7 @@ especially for the Alexa+ console, the CLI and device testing, which happen on t
   annotations, `_meta`, icons, resources, prompts, form elicitation, and `Client` (in-process and
   over HTTP) for the tests and the simulator.
 - **Worked well:** one codebase negotiates both 2025-11-25 and 2026-07-28. `Resolve(...)` plus
-  `Elicit` made elicitation version-agnostic, and an in-process `Client(server)` made 148 tests run
+  `Elicit` made elicitation version-agnostic, and an in-process `Client(server)` made about 200 tests run
   in about 3 seconds. Protocol-version-header and batch rejection came for free.
 - **Needs work:** the rename from `FastMCP` to `MCPServer` breaks every v1 tutorial (the error
   message does link the migration guide, which helped). On a stateless 2025-11-25 connection,

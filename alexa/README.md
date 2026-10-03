@@ -16,7 +16,7 @@ What Alexa+ discovers from the server:
 
 - `/.well-known/oauth-protected-resource` (RFC 9728) and `/.well-known/oauth-authorization-server`
 - `/mcp`: Streamable HTTP, protocol 2025-11-25. An unauthenticated request gets a bare 401.
-- 19 tools with zone-labelled descriptions and `readOnlyHint` / `destructiveHint` /
+- 21 tools with zone-labelled descriptions and `readOnlyHint` / `destructiveHint` /
   `idempotentHint` / `openWorldHint` annotations, 4 resources and 2 prompts.
 
 The icons in `assets/` are generated, so no third-party artwork is included.

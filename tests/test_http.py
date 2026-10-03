@@ -110,3 +110,16 @@ def test_alexa_account_linking_oauth_flow(client, monkeypatch):
     refreshed = client.post("/token", data={"grant_type": "refresh_token", "refresh_token": tokens["refresh_token"]}).json()
     assert refreshed["access_token"] != tokens["access_token"]
     assert client.post("/token", data={"grant_type": "refresh_token", "refresh_token": tokens["refresh_token"]}).status_code == 400
+
+
+def test_base_url_is_never_learned_from_a_forged_header(monkeypatch):
+    from raksha_mcp import config
+
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "http://localhost:8000")
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL_FIXED", False)
+    inner = Starlette(routes=[Route("/health", lambda r: PlainTextResponse("ok"))])
+    client = TestClient(web.LearnBaseUrl(inner))
+    client.get("/health", headers={"Host": "evil.example", "X-Forwarded-Host": "evil.example"})
+    assert config.PUBLIC_BASE_URL == "http://localhost:8000"
+    client.get("/health", headers={"Host": "abc123xyz.lambda-url.ap-south-1.on.aws"})
+    assert config.PUBLIC_BASE_URL == "https://abc123xyz.lambda-url.ap-south-1.on.aws"

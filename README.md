@@ -159,7 +159,8 @@ decorator: `@gate.tool(zone=Zone.APPROVE, moves_money=True)`.
 | `raksha_core/` | Raksha OS safety core and agents, **copied unchanged** from [Dhanya2810005/Raksha@1733c89](https://github.com/Dhanya2810005/Raksha) | Pre-existing |
 
 What was built during the hackathon window, and what existed before, is spelled out in
-[docs/WHATS_NEW.md](docs/WHATS_NEW.md). For more, see [architecture](docs/ARCHITECTURE.md),
+[docs/WHATS_NEW.md](docs/WHATS_NEW.md). For more, see the [threat model](docs/THREAT_MODEL.md) (each row
+links to the test that enforces it), [architecture](docs/ARCHITECTURE.md),
 [demo script](docs/DEMO_SCRIPT.md), [product feedback](docs/FEEDBACK.md) and
 [friction log](docs/FRICTION_LOG.md).
 

@@ -13,7 +13,10 @@ word belongs to a **Cedar policy**.
 > Built for the Amazon Developer Hackathon, **Alexa+ track**, also entering the **AWS Builder**
 > and **Open Source** mini challenges. By System_designers (Dhanyashree & Aakashdeep).
 
-![The Alexa+ simulator: a scam call is refused and the family is alerted](docs/img/sim-full.png)
+![Raksha in the Alexa+ simulator: a scam is reported, the scammer's call-back is refused, the family lifts the pause and approves a medicine order](docs/img/demo.gif)
+
+▶ **Full captioned demo (1:50):** [`docs/demo/raksha-demo.mp4`](docs/demo/raksha-demo.mp4), recorded from the running
+simulator by [`scripts/record_demo.js`](scripts/record_demo.js).
 
 ## Why
 

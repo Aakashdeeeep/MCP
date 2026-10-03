@@ -104,7 +104,7 @@ def reset():
     from boto3.dynamodb.conditions import Key
 
     for item in ledger.table().query(KeyConditionExpression=Key("pk").eq("PENDING_MONEY"))["Items"]:
-        ledger.remove_pending_money(item["sk"])
+        ledger.table().delete_item(Key={"pk": item["pk"], "sk": item["sk"]})
 
 
 async def run_scenario(scenario):

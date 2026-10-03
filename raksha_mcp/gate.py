@@ -134,9 +134,6 @@ def handle(agent, tool, args, utterance="", confidence=1.0, elder_confirmed=True
                 outcome, "blocked_scam_watch", SCAM_WATCH_EN.format(family=config.FAMILY_NAME), SCAM_WATCH_HI,
                 effective_zone=3, scam_watch=watch,
             )
-        # 3c. approval fatigue: don't let a flood of small requests wear the family down
-        if ledger.pending_money_count() >= config.MAX_PENDING_MONEY:
-            return _finish(outcome, "blocked_too_many", TOO_MANY_EN.format(family=config.FAMILY_NAME), TOO_MANY_HI)
 
     # 4. confidence floor
     task = planner.apply_confidence_floor(
@@ -160,6 +157,9 @@ def handle(agent, tool, args, utterance="", confidence=1.0, elder_confirmed=True
         if not elder_confirmed:
             return _finish(outcome, "cancelled", CANCELLED_EN, CANCELLED_HI)
         approval = request_family_approval(task, utterance)
+        if approval is None:
+            # approval fatigue: don't let a flood of small requests wear the family down
+            return _finish(outcome, "blocked_too_many", TOO_MANY_EN.format(family=config.FAMILY_NAME), TOO_MANY_HI)
         outcome["approval_id"] = approval["id"]
         return _finish(
             outcome,
@@ -206,7 +206,7 @@ def _run_panic(task, utterance, request_id):
     if task["tool"] == "report_scam":
         watch = ledger.set_scam_watch(task["args"].get("description", "scam alert"), config.SCAM_WATCH_MINUTES)
         ledger.record(
-            "scam_watch_on", f"Money paused for {config.SCAM_WATCH_MINUTES // 60 or 1}h after a scam alert", until=watch["until"]
+            "scam_watch_on", f"Money paused for {_duration(config.SCAM_WATCH_MINUTES)} after a scam alert", until=watch["until"]
         )
     title = "Scam alert sent to family" if task["tool"] == "report_scam" else "Emergency alert sent to family"
     ledger.record(
@@ -222,7 +222,14 @@ def _run_panic(task, utterance, request_id):
     }
 
 
+def _duration(minutes):
+    hours, rest = divmod(minutes, 60)
+    return " ".join(part for part in (f"{hours}h" if hours else "", f"{rest} min" if rest else "") if part) or "0 min"
+
+
 def request_family_approval(task, utterance):
+    """Save the request and message the family. Returns None, sending nothing, when a money
+    request finds every approval slot already taken."""
     now = datetime.now(timezone.utc)
     approval = {
         "id": uuid.uuid4().hex[:12],
@@ -242,9 +249,9 @@ def request_family_approval(task, utterance):
     watch = ledger.scam_watch()
     if watch:
         approval["scam_watch"] = watch
+    if spec.get("moves_money") and not ledger.claim_money_slot(approval["id"], approval["expires_at"], config.MAX_PENDING_MONEY):
+        return None  # every money slot is taken: nothing is saved or sent
     ledger.put_approval(approval)
-    if spec.get("moves_money"):
-        ledger.add_pending_money(approval["id"], approval["expires_at"])
     link = f"{config.PUBLIC_BASE_URL}/approval/{approval['id']}"
     body = (
         f"{config.ELDER_NAME} asked Alexa for something that needs your approval.\n\n"

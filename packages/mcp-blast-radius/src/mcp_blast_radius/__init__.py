@@ -23,6 +23,7 @@ stored call exactly once, and the policy is checked again at that moment.
 """
 import functools
 import inspect
+import math
 import secrets
 import time
 from enum import IntEnum
@@ -34,6 +35,7 @@ from mcp_blast_radius.store import MemoryStore, Store
 
 __all__ = ["BlastRadius", "Zone", "MemoryStore", "Store", "Policy", "default_policy", "ApprovalError"]
 __version__ = "0.1.0"
+UNREADABLE_AMOUNT = 2**62  # within Cedar's Long range, above any sane cap
 
 
 class Zone(IntEnum):
@@ -196,10 +198,16 @@ class BlastRadius:
 
     @staticmethod
     def _amount(spec, arguments):
-        value = arguments.get(spec["amount_arg"]) if spec["amount_arg"] else 0
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        value = arguments.get(spec["amount_arg"]) if spec["amount_arg"] else None
+        if value is None:
             return 0
-        return int(-(-value // 1))  # ceil, so 5000.01 counts as 5001 against the cap
+        try:
+            if isinstance(value, bool):
+                raise TypeError
+            amount = float(value)  # Decimal and numeric strings count too
+            return min(max(0, math.ceil(amount)), UNREADABLE_AMOUNT)  # ceil, so 5000.01 counts as 5001
+        except (TypeError, ValueError, OverflowError):
+            return UNREADABLE_AMOUNT  # fail closed: an amount we can't read is over any cap
 
     @staticmethod
     def _as_result(outcome):

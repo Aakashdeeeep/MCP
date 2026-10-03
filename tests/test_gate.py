@@ -243,6 +243,10 @@ def test_verify_caller_never_vouches_for_a_voice():
     stranger = gate.handle("raksha-voice", "verify_caller", {"claimed_identity": "Mr Sharma from customs"}, "")
     assert stranger["result"]["match"] == "none"
 
+    # whole words only: a granddaughter is not Priya the daughter
+    granddaughter = gate.handle("raksha-voice", "verify_caller", {"claimed_identity": "my granddaughter"}, "")
+    assert granddaughter["result"].get("contact") != "Priya"
+
 
 def test_verify_caller_still_trips_on_scam_words():
     out = gate.handle("raksha-voice", "verify_caller", {"claimed_identity": "SBI officer asking for my OTP"}, "SBI officer wants my OTP")
@@ -282,6 +286,10 @@ def test_english_scam_shapes_alert_the_family(said, signal):
     "Please send my daughter a message that I reached the temple",
     "My daughter is in hospital, please send her a message that I'm praying for her",
     "My son called from the police station where he works, he'll be late",
+    "I won't be able to pay the milk bill today",
+    "Did the refund for my doctor appointment come?",
+    "My daughter is in hospital ward 302, please message her",
+    "What a wonderful day, my granddaughter visited",
 ])
 def test_everyday_sentences_do_not_alarm(said):
     assert gate.handle("raksha-voice", "check_scam", {"what_happened": said}, said)["tripwire"] == []
@@ -303,3 +311,24 @@ def test_decisions_become_cloudwatch_metrics(monkeypatch, capsys):
     assert line["_aws"]["CloudWatchMetrics"][0]["Namespace"] == "Raksha/Gate"
     monkeypatch.setattr(config, "LOCAL", True)
     assert metrics.emit("done", "x.y", 0) is None
+
+
+def test_fatigue_limit_holds_under_concurrency():
+    """Twenty simultaneous payment requests (as from many Lambda instances): exactly two wait."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def ask(i):
+        return gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 100 + i, "description": f"bill {i}"}, "pay")["status"]
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        statuses = list(pool.map(ask, range(20)))
+    assert statuses.count("pending_family_approval") == 2
+    assert statuses.count("blocked_too_many") == 18
+
+
+def test_a_freed_slot_can_be_reused():
+    first = gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 101, "description": "a"}, "pay")
+    gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 102, "description": "b"}, "pay")
+    assert gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 103, "description": "c"}, "pay")["status"] == "blocked_too_many"
+    approvals.decide(first["approval_id"], approve=False)
+    assert gate.handle("payment-assistant", "create_payment_link", {"amount_inr": 104, "description": "d"}, "pay")["status"] == "pending_family_approval"

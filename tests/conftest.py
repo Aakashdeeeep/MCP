@@ -25,5 +25,5 @@ def fresh_safety_state():
 
     ledger.clear_scam_watch()
     for item in ledger.table().query(KeyConditionExpression=Key("pk").eq("PENDING_MONEY"))["Items"]:
-        ledger.remove_pending_money(item["sk"])
+        ledger.table().delete_item(Key={"pk": item["pk"], "sk": item["sk"]})
     yield

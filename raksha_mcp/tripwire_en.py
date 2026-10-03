@@ -14,9 +14,9 @@ import tripwire
 STRONG = {
     "gift_card_payment": r"gift\s*cards?|google\s*play\s*(card|code)|amazon\s*(pay\s*)?(card|voucher)",
     "remote_access_app": r"\b(quick\s*support|rust\s*desk|ammyy|install\w*\s+(an?\s+)?app\s+(so|to)\s+(he|she|they)\s+can)",
-    "refund_scam": r"refund.{0,40}(app|screen|access|install|otp)|(app|screen|access|install|otp).{0,40}refund",
+    "refund_scam": r"\brefund.{0,40}\b(apps?|screen|access|install\w*|otp)\b|\b(apps?|screen|access|install\w*|otp)\b.{0,40}\brefund",
     "disconnection_threat": r"(electricity|power|gas|sim|number|connection).{0,30}(cut|disconnect|block|deactivat)\w*.{0,30}(tonight|today|hours?|immediately)",
-    "fake_prize_fee": r"(lottery|prize|won|winner|lucky\s*draw|reward).{0,60}(fee|charges?|tax|pay|deposit|processing)",
+    "fake_prize_fee": r"\b(lottery|prize|won(?!['’]t)|winner|lucky\s*draw|reward)\b.{0,60}\b(fees?|charges?|tax|pay|deposit|processing)\b",
     "parcel_customs": r"(parcel|package|courier|fedex|dhl).{0,60}(drugs|illegal|seized|customs|narcotics)",
     "guaranteed_returns": r"(guaranteed|double|assured)\s+(returns?|profit|money)|(invest|trading).{0,40}(guaranteed|double)",
     "secrecy_demand": r"(don'?t|do\s*not)\s+tell\s+(anyone|your\s*(family|son|daughter|children))",
@@ -27,7 +27,7 @@ STRONG = {
 # Money must be explicit, so "my daughter is in hospital, send her a message" stays quiet.
 RELATIVE = r"\b(grandson|granddaughter|son|daughter|nephew|niece|relative|grandchild)\b"
 TROUBLE = r"\b(accident|arrest(ed)?|hospital|trouble|jail|police|kidnap\w*)\b"
-MONEY = r"money|\bpay(ment)?\b|transfer|\bupi\b|rupees|₹|\brs\.?\b|\bbail\b|\b\d{3,}\b"
+MONEY = r"money|\bpay(ment)?\b|transfer|\bupi\b|rupees|₹|\brs\.?\b|\bbail\b|\b(send|give|needs?|wants?|asking\s+for)\s+(\w+\s+){0,2}\d{3,}\b"
 
 
 def scam_signals(text):

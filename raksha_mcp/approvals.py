@@ -9,6 +9,8 @@ they ask ("Alexa, did my family approve the medicine?" -> check_request_status).
 import hmac
 from datetime import datetime, timezone
 
+from raksha_common.tool_registry import get_tool
+
 from raksha_mcp import agents, config, ledger, voice
 
 
@@ -48,7 +50,10 @@ def decide(approval_id, approve, passcode=""):
     if approval["status"] != "pending":
         raise ApprovalError(f"Already {approval['status']}.")
 
-    if approve and approval.get("moves_money") and ledger.scam_watch():
+    moves_money = approval.get("moves_money")
+    if moves_money is None:  # stored before the flag existed: ask the registry
+        moves_money = bool((get_tool(approval["agent"], approval["tool"]) or {}).get("moves_money"))
+    if approve and moves_money and ledger.scam_watch():
         # Asked for before the scam alert, maybe by the same caller: lift the pause first.
         raise ApprovalError("Money is paused after a scam alert. Call them, then lift the pause before approving.")
 

@@ -111,14 +111,39 @@ def clear_scam_watch():
 
 
 # --- pending money requests, for the approval-fatigue limit ------------------------------
+# A fixed number of slots, each claimed with a conditional write, so concurrent requests on
+# different Lambda instances can't all slip under the limit (no read-then-write race).
 
-def add_pending_money(approval_id, expires_at):
+def claim_money_slot(approval_id, expires_at, max_slots):
+    """Take a free slot for this pending money request. Returns False when all are taken."""
     expires = int(datetime.fromisoformat(expires_at).timestamp())
-    table().put_item(Item={"pk": "PENDING_MONEY", "sk": approval_id, "expires": expires, "ttl": expires + 60})
+    now = int(datetime.now(timezone.utc).timestamp())
+    for slot in range(max_slots):
+        try:
+            table().put_item(
+                Item={"pk": "PENDING_MONEY", "sk": f"slot#{slot}", "approval_id": approval_id, "expires": expires, "ttl": expires + 60},
+                ConditionExpression="attribute_not_exists(pk) OR #e < :now",
+                ExpressionAttributeNames={"#e": "expires"},
+                ExpressionAttributeValues={":now": now},
+            )
+            return True
+        except table().meta.client.exceptions.ConditionalCheckFailedException:
+            continue
+    return False
 
 
 def remove_pending_money(approval_id):
-    table().delete_item(Key={"pk": "PENDING_MONEY", "sk": approval_id})
+    """Free the slot this request held (if any)."""
+    for item in table().query(KeyConditionExpression=Key("pk").eq("PENDING_MONEY"))["Items"]:
+        if item.get("approval_id") == approval_id:
+            try:
+                table().delete_item(
+                    Key={"pk": "PENDING_MONEY", "sk": item["sk"]},
+                    ConditionExpression="approval_id = :id",
+                    ExpressionAttributeValues={":id": approval_id},
+                )
+            except table().meta.client.exceptions.ConditionalCheckFailedException:
+                pass  # the slot was already reused after expiring
 
 
 def pending_money_count():

@@ -11,6 +11,7 @@ the same tool registry, so the gate and the policy treat them exactly like the o
 """
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 from boto3.dynamodb.conditions import Key
@@ -247,6 +248,11 @@ def _digits(number):
     return digits[-10:] if len(digits) >= 10 else digits
 
 
+def _says(text, word):
+    """Whole words only, so "granddaughter" is not the daughter."""
+    return re.search(rf"(?<!\w){re.escape(word.lower())}(?!\w)", text) is not None
+
+
 def verify_caller(args, event):
     """Never says "yes, that's really them" from a voice: it says whether the NUMBER is a
     saved one, and otherwise gives the saved number to call back on."""
@@ -254,7 +260,7 @@ def verify_caller(args, event):
     number = _digits(args.get("phone_number"))
     contacts = trusted_contacts()
     by_number = next((c for c in contacts if number and _digits(c["phone"]) == number), None)
-    by_name = next((c for c in contacts if any(alias in claimed for alias in c.get("aliases", [])) or c["name"].lower() in claimed), None)
+    by_name = next((c for c in contacts if any(_says(claimed, word) for word in [*c.get("aliases", []), c["name"]])), None)
 
     if by_number:
         data = {"match": "number", "contact": by_number["name"], "relation": by_number["relation"], "call_back_number": by_number["phone"]}
@@ -285,7 +291,7 @@ def family_summary(args, event):
     if plan:
         missed = {}
         for medicine in plan.get("medicines") or []:
-            expected = len(medicine.get("times") or []) * min(days, max(1, (datetime.now(timezone.utc) - datetime.fromisoformat(plan["created_at"])).days + 1))
+            expected = adherence.expected_doses({**plan, "medicines": [medicine]}, days)
             taken = sum(1 for log in logs if log.get("taken") and log["medicine"].lower() == medicine["name"].lower())
             missed[medicine["name"]] = max(0, expected - taken)
         name, count = max(missed.items(), key=lambda item: item[1], default=(None, 0))
@@ -300,11 +306,15 @@ def family_summary(args, event):
     for reading in readings:
         latest.setdefault(reading["vital_type"], reading["value"])
 
-    feed = [entry for entry in ledger.feed(limit=60) if entry["at"] >= since.isoformat()]
+    # every tool call writes a feed line, so read the whole window, not just the newest page
+    feed = ledger.feed(limit=1000, after=since.isoformat())
     alerts = [entry for entry in feed if entry["kind"] == "alert"]
-    waiting = [entry for entry in feed if entry["kind"] == "approval_request"]
-    answered = {entry.get("approval_id") for entry in feed if entry["kind"].startswith("approval_") and entry["kind"] != "approval_request"}
-    pending = [entry for entry in waiting if entry.get("approval_id") not in answered]
+    now = datetime.now(timezone.utc)
+    pending = [
+        approval for approval in (ledger.get_approval(entry.get("approval_id")) for entry in feed if entry["kind"] == "approval_request")
+        # an unanswered request expires without a feed line until someone opens it, so check its clock
+        if approval and approval["status"] == "pending" and datetime.fromisoformat(approval["expires_at"]) > now
+    ]
 
     data = {
         "days": days,

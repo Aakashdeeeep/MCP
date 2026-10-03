@@ -16,9 +16,9 @@ from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from mcp_types.version import is_version_at_least
 from pydantic import BaseModel, Field
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
-from raksha_mcp import approvals, config, gate, ledger, web
+from raksha_mcp import approvals, config, gate, ledger, oauth, web
 from raksha_mcp.bootstrap import CORE
 from raksha_mcp.tools import TOOLS, ZONE_LABELS, ToolSpec
 
@@ -283,7 +283,53 @@ async def feed_api(request: Request) -> Response:
     return JSONResponse(entries)
 
 
+# --- OAuth 2.1 account linking (Alexa+) -----------------------------------------------
+
+NO_STORE = {"Cache-Control": "no-store"}
+
+
+@mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"], include_in_schema=False)
+@mcp.custom_route("/.well-known/oauth-protected-resource/mcp", methods=["GET"], include_in_schema=False)
+async def protected_resource(request: Request) -> Response:
+    return JSONResponse(oauth.protected_resource_metadata())
+
+
+@mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"], include_in_schema=False)
+async def authorization_server(request: Request) -> Response:
+    return JSONResponse(oauth.authorization_server_metadata())
+
+
+@mcp.custom_route("/authorize", methods=["GET", "POST"], include_in_schema=False)
+async def authorize(request: Request) -> Response:
+    params = dict(request.query_params) if request.method == "GET" else dict(await request.form())
+    try:
+        link = oauth.validate_authorize(params)
+    except oauth.OAuthError as error:
+        return HTMLResponse(web.shell("Raksha", f"<h1>Can't link</h1><p class=err>{error.description}</p>"), status_code=400)
+    if request.method == "GET":
+        return HTMLResponse(oauth.consent_page(link))
+    if params.get("decision") != "allow":
+        return RedirectResponse(oauth.deny(link), status_code=302)
+    try:
+        target = await anyio.to_thread.run_sync(oauth.approve, link, params.get("passcode", ""))
+    except oauth.OAuthError as error:
+        return HTMLResponse(oauth.consent_page(link, error=error.description), status_code=403)
+    return RedirectResponse(target, status_code=302)
+
+
+@mcp.custom_route("/token", methods=["POST"], include_in_schema=False)
+async def token(request: Request) -> Response:
+    form = dict(await request.form())
+    try:
+        issued = await anyio.to_thread.run_sync(oauth.token, form)
+    except oauth.OAuthError as error:
+        return JSONResponse({"error": error.error, "error_description": error.description}, status_code=400, headers=NO_STORE)
+    return JSONResponse(issued, headers=NO_STORE)
+
+
 def build_app():
+    if not config.LOCAL and not config.APPROVAL_PASSCODE:
+        raise RuntimeError("APPROVAL_PASSCODE is required outside local mode: it guards account linking and approvals")
     from mcp.server.transport_security import TransportSecuritySettings
 
     starlette_app = mcp.streamable_http_app(
@@ -295,7 +341,7 @@ def build_app():
         if config.HOST not in ("127.0.0.1", "localhost")
         else None,
     )
-    return web.LearnBaseUrl(web.BearerAuth(starlette_app, config.MCP_AUTH_TOKEN, protected_prefix="/mcp"))
+    return web.LearnBaseUrl(web.McpGuard(starlette_app))
 
 
 app = build_app()

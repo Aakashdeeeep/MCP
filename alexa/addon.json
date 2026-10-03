@@ -1,0 +1,81 @@
+{
+  "manifestVersion": "1.0",
+  "integrations": [
+    {
+      "type": "MCP",
+      "config": {
+        "endpoints": {
+          "default": {
+            "type": "HTTPS",
+            "uri": "https://REPLACE-WITH-YOUR-FUNCTION-URL.lambda-url.REGION.on.aws/mcp"
+          }
+        }
+      }
+    }
+  ],
+  "storeListing": {
+    "distributionCountries": [
+      "US",
+      "IN"
+    ],
+    "locales": {
+      "en-US": {
+        "name": {
+          "value": "Raksha"
+        },
+        "default": "DEFAULT",
+        "shortDescription": "Medicines, family and scam protection for an elder, with every action checked by a safety policy.",
+        "fullDescription": "Raksha lets Alexa+ look after an older family member safely. Ask what medicine is still due, log a dose or a blood-pressure reading, message the family, check the weather before a walk, or find the nearest pharmacy. Tell Alexa about a suspicious call (an OTP request, a fake bank or police officer, 'digital arrest') and Raksha alerts the family at once and reads out calm advice. Orders, payments and calendar changes are sent to the family for approval every time, and a Cedar policy refuses anything unsafe, such as payments above a cap or any payment during a suspected scam. Connects over MCP (Streamable HTTP, spec 2025-11-25) with OAuth 2.1 + PKCE account linking guarded by a family passcode.",
+        "examplePhrases": [
+          "Ask Raksha which medicines I still need to take today",
+          "Ask Raksha if this call asking for my OTP is a scam",
+          "Ask Raksha to order my Metformin",
+          "Ask Raksha to tell my daughter I'm feeling better"
+        ],
+        "privacyAndCompliance": {
+          "privacyPolicyUrl": "https://github.com/Aakashdeeeep/MCP/blob/main/PRIVACY.md",
+          "termsOfUseUrl": "https://github.com/Aakashdeeeep/MCP/blob/main/TERMS.md"
+        },
+        "mediaAssets": {
+          "bannerImages": [],
+          "carouselImages": [
+            {
+              "altText": "Raksha: medicines, family and scam protection for Alexa+",
+              "size": "600x900",
+              "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/carousel-600x900.png"
+            }
+          ],
+          "icons": {
+            "dark": [],
+            "light": [
+              {
+                "size": "64x64",
+                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-64x64.png"
+              },
+              {
+                "size": "72x72",
+                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-72x72.png"
+              },
+              {
+                "size": "88x88",
+                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-88x88.png"
+              },
+              {
+                "size": "126x126",
+                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-126x126.png"
+              },
+              {
+                "size": "180x180",
+                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-180x180.png"
+              },
+              {
+                "size": "241x241",
+                "uri": "https://cdn.jsdelivr.net/gh/Aakashdeeeep/MCP@main/alexa/assets/icon-241x241.png"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

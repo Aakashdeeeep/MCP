@@ -132,26 +132,54 @@ refresh(); setInterval(refresh, 2000);
     )
 
 
-class BearerAuth:
-    """ASGI middleware: requests under `protected_prefix` need `Authorization: Bearer <token>`.
+class McpGuard:
+    """ASGI middleware in front of /mcp.
 
-    Constant-time comparison. With no token configured the guard is off (local demo only;
-    the SAM template requires one)."""
+    - Origin: a browser Origin that isn't this server, localhost or RAKSHA_ALLOWED_ORIGINS gets
+      403 (DNS-rebinding / cross-site protection; Alexa's server-to-server calls send none).
+    - Auth: `Authorization: Bearer <token>` with the static MCP_AUTH_TOKEN or an OAuth access
+      token from account linking. Otherwise a bare 401 with no WWW-Authenticate header, as the
+      Alexa+ MCP checklist asks (clients find the OAuth server via RFC 9728 metadata)."""
 
-    def __init__(self, app, token, protected_prefix="/mcp"):
-        self.app, self.token, self.prefix = app, token, protected_prefix
+    def __init__(self, app, prefix="/mcp"):
+        self.app, self.prefix = app, prefix
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and self.token and scope["path"].startswith(self.prefix):
+        if scope["type"] == "http" and scope["path"].startswith(self.prefix):
             headers = dict(scope.get("headers") or [])
-            supplied = headers.get(b"authorization", b"").decode()
-            if not hmac.compare_digest(supplied, f"Bearer {self.token}"):
-                body = json.dumps({"error": "unauthorized"}).encode()
-                await send({"type": "http.response.start", "status": 401, "headers": [
-                    (b"content-type", b"application/json"), (b"www-authenticate", b"Bearer")]})
-                await send({"type": "http.response.body", "body": body})
-                return
+            origin = headers.get(b"origin", b"").decode().rstrip("/")
+            if origin and not _origin_allowed(origin):
+                return await _json(send, 403, {"error": "origin not allowed"})
+            if config.REQUIRE_AUTH and not await _authorized(headers.get(b"authorization", b"").decode()):
+                return await _json(send, 401, {"error": "unauthorized"})
         await self.app(scope, receive, send)
+
+
+def _origin_allowed(origin):
+    host = origin.split("://", 1)[-1].split(":")[0]
+    return (
+        host in ("localhost", "127.0.0.1", "[::1]")
+        or origin == config.PUBLIC_BASE_URL
+        or origin in config.ALLOWED_ORIGINS
+    )
+
+
+async def _authorized(header):
+    import anyio
+
+    from raksha_mcp import oauth
+
+    if not header.startswith("Bearer "):
+        return False
+    supplied = header[len("Bearer "):].strip()
+    if config.MCP_AUTH_TOKEN and hmac.compare_digest(supplied, config.MCP_AUTH_TOKEN):
+        return True
+    return await anyio.to_thread.run_sync(oauth.access_token_valid, supplied)
+
+
+async def _json(send, status, payload):
+    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"application/json")]})
+    await send({"type": "http.response.body", "body": json.dumps(payload).encode()})
 
 
 class LearnBaseUrl:

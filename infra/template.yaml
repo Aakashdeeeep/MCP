@@ -9,15 +9,19 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 24
-    Description: "Shared secret Alexa+ sends as the bearer token (Authorization header). Generate with: openssl rand -hex 24"
+    Description: "Static bearer token for the simulator and MCP Inspector (Alexa+ itself uses OAuth account linking). Generate with: openssl rand -hex 24"
   ApprovalPasscode:
     Type: String
     NoEcho: true
-    Default: ""
-    Description: Optional passcode the family types on the approval page (and ?key= for the feed).
+    MinLength: 6
+    Description: Family passcode, required on the public endpoint. Typed to link an Alexa account, to approve requests, and as ?key= for the family feed.
   CaregiverEmail:
     Type: String
     Description: Family email that receives alerts and approval links (confirm the SNS email).
+  OAuthRedirectHosts:
+    Type: String
+    Default: ""
+    Description: Optional comma-separated allowlist of OAuth redirect hosts for account linking (empty = any https host; the consent page needs the family passcode).
   ElderName:
     Type: String
     Default: Kamala
@@ -48,12 +52,13 @@ Resources:
     Properties:
       PackageType: Image
       FunctionUrlConfig:
-        AuthType: NONE # /mcp is protected by the bearer token in the app; approval pages by passcode
+        AuthType: NONE # /mcp needs a bearer token (OAuth account linking or the static token); family pages a passcode
         InvokeMode: BUFFERED
       Environment:
         Variables:
           MCP_AUTH_TOKEN: !Ref McpAuthToken
           APPROVAL_PASSCODE: !Ref ApprovalPasscode
+          OAUTH_REDIRECT_HOSTS: !Ref OAuthRedirectHosts
           RAKSHA_ELDER_NAME: !Ref ElderName
           RAKSHA_FAMILY_NAME: !Ref FamilyName
           RAKSHA_BEDROCK: !Ref EnableBedrock
@@ -144,11 +149,12 @@ Resources:
         - { AttributeName: patient_id, KeyType: HASH }
       TimeToLiveSpecification: { AttributeName: expires_at, Enabled: true }
 
-  # New for the MCP layer: family feed + pending approvals
+  # New for the MCP layer: family feed, pending approvals, OAuth codes and tokens (hashed)
   LedgerTable:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification: { AttributeName: ttl, Enabled: true }
       AttributeDefinitions:
         - { AttributeName: pk, AttributeType: S }
         - { AttributeName: sk, AttributeType: S }

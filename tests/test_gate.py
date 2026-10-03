@@ -290,3 +290,16 @@ def test_everyday_sentences_do_not_alarm(said):
 def test_english_emergency_shapes():
     out = gate.handle("care-coordinator", "check_weather", {}, "I fell in the bathroom and can't get up")
     assert [a["tool"] for a in out["alerts"]] == ["report_emergency"]
+
+
+def test_decisions_become_cloudwatch_metrics(monkeypatch, capsys):
+    import json
+
+    from raksha_mcp import config, metrics
+
+    monkeypatch.setattr(config, "LOCAL", False)
+    line = json.loads(metrics.emit("blocked_scam_watch", "payment-assistant.create_payment_link", 0))
+    assert line["Blocked"] == 1 and line["Status"] == "blocked_scam_watch"
+    assert line["_aws"]["CloudWatchMetrics"][0]["Namespace"] == "Raksha/Gate"
+    monkeypatch.setattr(config, "LOCAL", True)
+    assert metrics.emit("done", "x.y", 0) is None

@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -r requirements-dev.txt cfn-lint
+          pip install -e packages/mcp-blast-radius
+      - name: Raksha MCP tests (offline, simulated AWS)
+        run: pytest -q
+      - name: Red-team scorecard (fails on any breach)
+        run: python -m evals.redteam
+      - name: mcp-blast-radius tests
+        working-directory: packages/mcp-blast-radius
+        run: pytest -q
+      - name: Lint the SAM template
+        run: cfn-lint infra/template.yaml

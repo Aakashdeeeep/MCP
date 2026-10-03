@@ -1,5 +1,8 @@
 # Raksha for Alexa+
 
+[![CI](https://github.com/Aakashdeeeep/MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Aakashdeeeep/MCP/actions/workflows/ci.yml)
+![MCP 2025-11-25](https://img.shields.io/badge/MCP-2025--11--25-orange) ![Streamable HTTP](https://img.shields.io/badge/transport-Streamable%20HTTP-blue) ![License MIT](https://img.shields.io/badge/license-MIT-green)
+
 **Alexa proposes. Raksha's policy decides.**
 
 Raksha is a self-hosted **MCP server** (spec **2025-11-25**, **Streamable HTTP**) that lets Alexa+
@@ -133,6 +136,14 @@ account linking (OAuth 2.1 + PKCE, consent page guarded by the family passcode).
 - **Auth:** OAuth 2.1 account linking with RFC 9728 and RFC 8414 metadata, or a static bearer
   token for testing. Unauthenticated calls get a bare 401, and foreign browser origins get 403.
 
+## Open source: `mcp-blast-radius`
+
+The safety pattern is also a standalone, MIT-licensed library any MCP server can use:
+[`packages/mcp-blast-radius`](packages/mcp-blast-radius). It gives you zones fixed in code, a
+Cedar policy (deny by default, money needs approval, spending cap, lockdown), tripwire
+lockdowns, an approval-fatigue limit, and approvals that run exactly once, all behind one
+decorator: `@gate.tool(zone=Zone.APPROVE, moves_money=True)`.
+
 ## Repository map
 
 | Path | What | New for this hackathon? |
@@ -140,7 +151,8 @@ account linking (OAuth 2.1 + PKCE, consent page guarded by the family passcode).
 | `raksha_mcp/` | MCP server, gate, approvals, OAuth, voice lines, family pages | **New** |
 | `simulator/` | Alexa+ simulator (voice UI, Bedrock agent loop, family phone) | **New** |
 | `infra/`, `Dockerfile`, `alexa/` | SAM template, Lambda image, Alexa+ add-on package | **New** |
-| `tests/` | 198 tests: protocol, schemas, gate matrix, red team, OAuth | **New** |
+| `tests/`, `evals/` | 199 tests (protocol, schemas, gate matrix, OAuth) and the red-team scorecard | **New** |
+| `packages/mcp-blast-radius/` | The pattern as a reusable open-source library (8 tests) | **New** |
 | `raksha_core/` | Raksha OS safety core and agents, **copied unchanged** from [Dhanya2810005/Raksha@1733c89](https://github.com/Dhanya2810005/Raksha) | Pre-existing |
 
 What was built during the hackathon window, and what existed before, is spelled out in

@@ -162,6 +162,34 @@ Resources:
         - { AttributeName: pk, KeyType: HASH }
         - { AttributeName: sk, KeyType: RANGE }
 
+  GateDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}-gate"
+      DashboardBody: !Sub |
+        {"widgets":[
+          {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"Alexa tool calls vs. blocked","region":"${AWS::Region}","stat":"Sum","period":300,
+            "metrics":[["Raksha/Gate","ToolCalls"],["Raksha/Gate","Blocked"],["Raksha/Gate","SentForApproval"]]}},
+          {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"Family alerts (scams, emergencies)","region":"${AWS::Region}","stat":"Sum","period":300,
+            "metrics":[["Raksha/Gate","FamilyAlerts"]]}},
+          {"type":"metric","x":0,"y":6,"width":24,"height":6,"properties":{"title":"Decisions by status","region":"${AWS::Region}","stat":"Sum","period":300,
+            "metrics":[["Raksha/Gate","ToolCalls","Status","done"],["...","pending_family_approval"],["...","alerted"],["...","blocked_scam"],["...","blocked_scam_watch"],["...","blocked_policy"],["...","blocked_too_many"]]}}
+        ]}
+
+  ScamSpikeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Several scam or emergency alerts in an hour. Someone may be actively targeting the elder.
+      Namespace: Raksha/Gate
+      MetricName: FamilyAlerts
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref CaregiverTopic]
+
   MonthlyBudget:
     Type: AWS::Budgets::Budget
     Properties:
@@ -177,6 +205,8 @@ Resources:
           Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref CaregiverEmail }]
 
 Outputs:
+  GateDashboard:
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${AWS::StackName}-gate"
   McpEndpoint:
     Description: Register this URL as the MCP server (Streamable HTTP), with the bearer token
     Value: !Sub "${RakshaMcpFunctionUrl.FunctionUrl}mcp"

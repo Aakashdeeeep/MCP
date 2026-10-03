@@ -29,7 +29,7 @@ import tripwire
 from raksha_common.policy import authorize
 from raksha_common.tool_registry import get_tool
 
-from raksha_mcp import agents, config, ledger, tripwire_en, voice
+from raksha_mcp import agents, config, ledger, metrics, tripwire_en, voice
 from raksha_mcp import voice_agent  # noqa: F401 - registers the raksha-voice tools
 
 CONFIDENCE_FLOOR = planner.CONFIDENCE_FLOOR
@@ -293,4 +293,5 @@ def _finish(outcome, status, speech, hindi, **extra):
         speech=speech,
         mocked=outcome.get("mocked", False),
     )
+    metrics.emit(status, outcome["tool"], len(alerts))
     return outcome

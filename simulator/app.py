@@ -130,41 +130,55 @@ async def offline_turn(client, text, queue):
     await queue.put({"type": "say", "text": speech})
 
 
-async def bedrock_turn(client, tools, session, text, queue):
+def make_llm():
+    """The model client. A function so tests can swap in a stand-in."""
     from anthropic import AsyncAnthropicBedrockMantle
 
-    llm = AsyncAnthropicBedrockMantle(aws_region=BEDROCK_REGION)
+    return AsyncAnthropicBedrockMantle(aws_region=BEDROCK_REGION)
+
+
+async def bedrock_turn(client, tools, session, text, queue, llm=None):
+    """One spoken turn: Claude picks Raksha tools from tools/list until it has something to say.
+
+    The turn is atomic in the conversation history: on a refusal, an error or too many tool
+    rounds it is rolled back, so a later turn never resends a tool_use without its tool_result."""
+    llm = llm or make_llm()
     tool_defs = [
         {"name": t.name, "description": t.description or "", "input_schema": t.input_schema} for t in tools
     ]
     instructions = getattr(client, "instructions", None) or ""
     messages = conversations.setdefault(session, [])
+    start = len(messages)
     messages.append({"role": "user", "content": text})
-
-    for _ in range(MAX_TOOL_ROUNDS):
-        response = await llm.messages.create(
-            model=MODEL_ID,
-            max_tokens=4000,
-            system=f"{PERSONA}\n\n{instructions}",
-            tools=tool_defs,
-            messages=messages,
-            output_config={"effort": "low"},  # a voice turn: keep it quick
-        )
-        if response.stop_reason == "refusal":
-            await queue.put({"type": "say", "text": "Sorry, I can't help with that one."})
-            messages.pop()
-            return
-        messages.append({"role": "assistant", "content": response.content})
-        uses = [block for block in response.content if block.type == "tool_use"]
-        if response.stop_reason != "tool_use" or not uses:
-            spoken = " ".join(block.text for block in response.content if block.type == "text").strip()
-            await queue.put({"type": "say", "text": spoken or "Okay."})
-            return
-        results = []
-        for use in uses:
-            speech, outcome = await call_tool(client, use.name, dict(use.input), queue)
-            results.append({"type": "tool_result", "tool_use_id": use.id, "content": json.dumps({"say": speech, **outcome}, default=str)})
-        messages.append({"role": "user", "content": results})
+    try:
+        for _ in range(MAX_TOOL_ROUNDS):
+            response = await llm.messages.create(
+                model=MODEL_ID,
+                max_tokens=4000,
+                system=f"{PERSONA}\n\n{instructions}",
+                tools=tool_defs,
+                messages=messages,
+                output_config={"effort": "low"},  # a voice turn: keep it quick
+            )
+            if response.stop_reason == "refusal":
+                del messages[start:]
+                await queue.put({"type": "say", "text": "Sorry, I can't help with that one."})
+                return
+            uses = [block for block in response.content if block.type == "tool_use"]
+            messages.append({"role": "assistant", "content": response.content})
+            if response.stop_reason != "tool_use" or not uses:
+                spoken = " ".join(block.text for block in response.content if block.type == "text").strip()
+                await queue.put({"type": "say", "text": spoken or "Okay."})
+                return
+            results = []
+            for use in uses:
+                speech, outcome = await call_tool(client, use.name, dict(use.input), queue)
+                results.append({"type": "tool_result", "tool_use_id": use.id, "content": json.dumps({"say": speech, **outcome}, default=str)})
+            messages.append({"role": "user", "content": results})
+    except BaseException:
+        del messages[start:]
+        raise
+    del messages[start:]
     await queue.put({"type": "say", "text": "Let me stop there. Could you ask me again?"})
 
 

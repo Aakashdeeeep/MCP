@@ -41,6 +41,8 @@ especially for the Alexa+ console, the CLI and device testing, which happen on t
   family, and a cost guardrail.
 - **Worked well:** Web Adapter means no Lambda-specific code: the same `uvicorn` app runs locally
   and in Lambda. DynamoDB conditional writes gave us run-exactly-once approvals cheaply.
+- CloudWatch Embedded Metric Format turned one `print` per decision into a dashboard and an
+  alarm, with no SDK calls on the hot path.
 - **Needs work:** the Function URL isn't known until the stack exists, so OAuth metadata and
   approval links can't be environment variables without a second deploy. We learn the URL from
   the first request instead.

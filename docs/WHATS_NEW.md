@@ -44,4 +44,7 @@ someone else's model, reaching us over MCP, so everything below is new.
 | Alexa+ simulator | `simulator/` | A separate MCP client with a voice UI (Web Speech), Claude on Bedrock choosing tools from `tools/list`, spoken elicitation, and the family's phone with Approve/Reject. |
 | AWS | `infra/template.yaml`, `Dockerfile`, `scripts/seed_demo.py` | Lambda container with Web Adapter and a Function URL, DynamoDB with TTL, SNS, the Bedrock Mantle IAM action, and a Budget. |
 | Alexa+ package | `alexa/` | `addon.json`, generated icons, privacy and terms. |
-| Tests | `tests/` | 198 tests, including red-team cases where Alexa or a scammer speaking through Alexa tries to move money. |
+| Observability | `raksha_mcp/metrics.py`, `infra/template.yaml` | Every gate decision as a CloudWatch Embedded Metric Format line, plus a dashboard and a scam-spike alarm to the family's SNS topic. |
+| Open-source library | `packages/mcp-blast-radius/` | The safety pattern as a standalone MIT library for any MCP server, with an example and tests. |
+| Demo tooling | `scripts/record_demo.js`, `docs/demo/`, `docs/img/demo.gif` | A Playwright script that records the captioned demo video from the running simulator. |
+| Tests and CI | `tests/`, `.github/workflows/ci.yml` | 203 tests: red-team cases, OAuth, and the simulator's Claude agent loop against the real MCP server. CI runs both suites, the scorecard and cfn-lint. |

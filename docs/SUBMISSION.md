@@ -14,6 +14,16 @@ payments and calendar changes are confirmed with the elder through MCP elicitati
 approved by the family on their phone. A Cedar policy refuses anything unsafe, even with the
 family's approval, and refuses any payment during a suspected scam.
 
+## Why it stands out
+- **Defends across turns, not sentences.** After a scam alert, money stays paused even for
+  the scammer's keyword-free call-back, and only the family can lift it. An approval-fatigue
+  limit stops floods of small requests, and `verify_caller` never vouches for a voice.
+- **Measured, not claimed.** `python -m evals.redteam` runs 16 attacks through the real MCP
+  server with a fully compromised assistant and an elder who says yes to everything:
+  **0 money actions executed**. It runs in CI.
+- **Readable rules.** The policy is Cedar, served to Alexa as an MCP resource, and every
+  decision names the rule that fired.
+
 ## How it works
 Every `tools/call` from Alexa passes a gate before any code acts. The gate checks the tool
 registry, runs a scam and emergency tripwire over the elder's exact words and every argument,
@@ -38,16 +48,21 @@ approvals, OAuth, voice tools, simulator, AWS deploy and tests are new.
   `Dockerfile`).
 - **DynamoDB:** Raksha tables, plus a ledger for approvals, the feed and OAuth tokens (TTL).
 - **SNS:** family alerts. **AWS Budgets:** cost guardrail.
+- **CloudWatch:** every gate decision as an Embedded Metric Format metric, a dashboard
+  (calls, blocked, sent for approval, family alerts by status), and a scam-spike alarm.
 
 ## Open Source
 - Repo: https://github.com/Aakashdeeeep/MCP (MIT)
 - GitHub usernames: Aakashdeeeep, Dhanya2810005
-- Contribution: a reusable pattern for **policy-gated MCP tools**. Any MCP server can put a
-  Cedar policy and a zone registry between an assistant's model and real-world actions. The gate
-  (`raksha_mcp/gate.py`), version-aware elicitation and the OAuth module are self-contained.
+- Additional open-source project: **`mcp-blast-radius`** (`packages/mcp-blast-radius/`, MIT).
+  It is a pip-installable library that puts zones, a Cedar policy, tripwire lockdowns, an
+  approval-fatigue limit and exactly-once approvals in front of any MCP server's tools, behind
+  one decorator, with an example server and tests. *(Publish it as its own repository before
+  submitting, e.g. `github.com/Aakashdeeeep/mcp-blast-radius`, and use that as the
+  contribution URL.)*
 - Contribution URL: *(add the PR or fork link if you also contribute upstream, e.g. an example
   to the MCP Python SDK)*
 
 ## Links
-- Demo video: *(YouTube link)*
+- Demo video: *(YouTube link)*. A captioned cut is at `docs/demo/raksha-demo.mp4`.
 - Feedback: `docs/FEEDBACK.md` · Friction log: `docs/FRICTION_LOG.md`

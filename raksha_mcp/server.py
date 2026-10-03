@@ -295,7 +295,7 @@ def build_app():
         if config.HOST not in ("127.0.0.1", "localhost")
         else None,
     )
-    return web.BearerAuth(starlette_app, config.MCP_AUTH_TOKEN, protected_prefix="/mcp")
+    return web.LearnBaseUrl(web.BearerAuth(starlette_app, config.MCP_AUTH_TOKEN, protected_prefix="/mcp"))
 
 
 app = build_app()

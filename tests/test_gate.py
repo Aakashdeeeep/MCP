@@ -149,3 +149,33 @@ def test_cedar_and_python_fallback_agree_for_every_exposed_tool(spec, approved, 
     cedar = authorize(task, event)
     assert cedar["engine"] == "cedar"
     assert cedar["allowed"] == python_decision(*build_request(task, event))[0]
+
+
+def test_bedrock_verdict_escalates_what_keywords_miss(monkeypatch):
+    """A scam with no tripwire keywords: the Bedrock classifier's 'scam' still alerts the family."""
+    from raksha_mcp import voice_agent
+
+    monkeypatch.setattr(voice_agent, "classify_with_bedrock", lambda text: {
+        "verdict": "scam", "scam_type": "fake_job", "reason_en": "Upfront fee for a work-from-home job.",
+    })
+    out = gate.handle("raksha-voice", "check_scam", {"what_happened": "A company says pay 2000 to start a typing job from home"}, "")
+    assert out["status"] == "alerted"
+    assert alerts_of(out) == ["report_scam"]
+    assert out["result"]["source"] == "bedrock"
+
+
+def test_bedrock_classifier_shape_is_validated(monkeypatch):
+    from types import SimpleNamespace
+
+    from raksha_mcp import config, voice_agent
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            assert kwargs["tool_choice"] == {"type": "tool", "name": "record_verdict"}
+            return SimpleNamespace(content=[SimpleNamespace(type="tool_use", input={"verdict": "definitely", "reason_en": "x"})])
+
+    import anthropic
+
+    monkeypatch.setattr(config, "BEDROCK_ENABLED", True)
+    monkeypatch.setattr(anthropic, "AnthropicBedrockMantle", lambda **kw: SimpleNamespace(messages=FakeMessages()))
+    assert voice_agent.classify_with_bedrock("anything") is None  # an invalid verdict is ignored

@@ -17,6 +17,8 @@ FAMILY_NAME = os.environ.get("RAKSHA_FAMILY_NAME", "Priya")
 MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
 
 # Where the family opens approval links. In AWS mode this is the Function URL.
+# Unset on Lambda: web.LearnBaseUrl fills it in from the first request (the Function URL).
+PUBLIC_BASE_URL_FIXED = bool(os.environ.get("PUBLIC_BASE_URL"))
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 APPROVAL_PASSCODE = os.environ.get("APPROVAL_PASSCODE", "")
 APPROVAL_TTL_SECONDS = int(os.environ.get("APPROVAL_TTL_SECONDS", "3600"))

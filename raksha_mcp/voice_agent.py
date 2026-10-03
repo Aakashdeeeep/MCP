@@ -106,7 +106,10 @@ SCAM_SYSTEM_PROMPT = (
 
 
 def classify_with_bedrock(text):
-    """Returns the parsed verdict, or None when Bedrock is off or fails (the tripwire still ran)."""
+    """Returns the parsed verdict, or None when Bedrock is off or fails (the tripwire still ran).
+
+    The Bedrock Messages-API endpoint doesn't support structured outputs, so the verdict comes
+    back as the input of one forced tool call, and code checks every field anyway."""
     if not config.BEDROCK_ENABLED:
         return None
     try:
@@ -118,11 +121,17 @@ def classify_with_bedrock(text):
             max_tokens=400,
             system=SCAM_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": f"<description>{text[:2000]}</description>"}],
-            output_config={"format": {"type": "json_schema", "schema": SCAM_SCHEMA}},
+            tools=[{"name": "record_verdict", "description": "Record the scam verdict.", "input_schema": SCAM_SCHEMA}],
+            tool_choice={"type": "tool", "name": "record_verdict"},
         )
-        if response.stop_reason != "end_turn":
+        verdict = next((block.input for block in response.content if block.type == "tool_use"), None)
+        if not isinstance(verdict, dict) or verdict.get("verdict") not in SCAM_SCHEMA["properties"]["verdict"]["enum"]:
             return None
-        return json.loads(next(block.text for block in response.content if block.type == "text"))
+        return {
+            "verdict": verdict["verdict"],
+            "scam_type": str(verdict.get("scam_type") or "unknown")[:40],
+            "reason_en": str(verdict.get("reason_en") or "")[:300],
+        }
     except Exception as error:  # noqa: BLE001 - a model outage must never block the advice
         print(f"Bedrock scam classifier unavailable: {error!r}")
         return None

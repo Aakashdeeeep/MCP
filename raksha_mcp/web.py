@@ -152,3 +152,21 @@ class BearerAuth:
                 await send({"type": "http.response.body", "body": body})
                 return
         await self.app(scope, receive, send)
+
+
+class LearnBaseUrl:
+    """ASGI middleware: on Lambda the Function URL isn't known until the stack exists, so the
+    approval links use the host the first request arrived on. PUBLIC_BASE_URL overrides it."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and not config.PUBLIC_BASE_URL_FIXED:
+            headers = dict(scope.get("headers") or [])
+            host = headers.get(b"x-forwarded-host", headers.get(b"host", b"")).decode()
+            if host and not host.startswith(("127.0.0.1", "localhost")):
+                proto = headers.get(b"x-forwarded-proto", b"https").decode()
+                config.PUBLIC_BASE_URL = f"{proto}://{host}"
+                config.PUBLIC_BASE_URL_FIXED = True
+        await self.app(scope, receive, send)

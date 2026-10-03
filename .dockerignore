@@ -1,0 +1,7 @@
+.venv
+.git
+**/__pycache__
+tests
+simulator
+docs
+.aws-sam

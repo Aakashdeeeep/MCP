@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Raksha MCP for Alexa+: a blast-radius-safe MCP server (Streamable HTTP, spec 2025-11-25)
+  on Lambda behind a Function URL, with DynamoDB state, SNS family alerts and Bedrock.
+
+Parameters:
+  McpAuthToken:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    Description: "Shared secret Alexa+ sends as the bearer token (Authorization header). Generate with: openssl rand -hex 24"
+  ApprovalPasscode:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Optional passcode the family types on the approval page (and ?key= for the feed).
+  CaregiverEmail:
+    Type: String
+    Description: Family email that receives alerts and approval links (confirm the SNS email).
+  ElderName:
+    Type: String
+    Default: Kamala
+  FamilyName:
+    Type: String
+    Default: Priya
+  EnableBedrock:
+    Type: String
+    AllowedValues: ["0", "1"]
+    Default: "1"
+    Description: 1 = check_scam asks Claude on Bedrock about scams the keyword tripwire can't see.
+  ScamModelId:
+    Type: String
+    Default: anthropic.claude-haiku-4-5
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 20
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+    Architectures: [x86_64]
+
+Resources:
+  RakshaMcpFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      FunctionUrlConfig:
+        AuthType: NONE # /mcp is protected by the bearer token in the app; approval pages by passcode
+        InvokeMode: BUFFERED
+      Environment:
+        Variables:
+          MCP_AUTH_TOKEN: !Ref McpAuthToken
+          APPROVAL_PASSCODE: !Ref ApprovalPasscode
+          RAKSHA_ELDER_NAME: !Ref ElderName
+          RAKSHA_FAMILY_NAME: !Ref FamilyName
+          RAKSHA_BEDROCK: !Ref EnableBedrock
+          SCAM_MODEL_ID: !Ref ScamModelId
+          BEDROCK_REGION: !Ref AWS::Region
+          DEMO_PATIENT_ID: demo-elder-001
+          CAREGIVER_TOPIC_ARN: !Ref CaregiverTopic
+          VITALS_TABLE: !Ref VitalsLogTable
+          ALERTS_TABLE: !Ref CaregiverAlertsTable
+          CARE_PLANS_TABLE: !Ref CarePlansTable
+          ADHERENCE_TABLE: !Ref AdherenceLogTable
+          CONVERSATION_TABLE: !Ref ConversationStateTable
+          LEDGER_TABLE: !Ref LedgerTable
+          # PUBLIC_BASE_URL is learned from the first request's Host header (the Function URL)
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref VitalsLogTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref CaregiverAlertsTable }
+        - DynamoDBReadPolicy: { TableName: !Ref CarePlansTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref AdherenceLogTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref ConversationStateTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref LedgerTable }
+        - SNSPublishMessagePolicy: { TopicName: !GetAtt CaregiverTopic.TopicName }
+        - Statement:
+            - Effect: Allow
+              # Claude in Amazon Bedrock (Messages API endpoint, bedrock-mantle.<region>.api.aws)
+              Action: [bedrock-mantle:CreateInference]
+              Resource: "*"
+    Metadata:
+      DockerContext: ..
+      Dockerfile: Dockerfile
+      DockerTag: raksha-mcp
+
+  CaregiverTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref CaregiverEmail
+
+  # Same table shapes as Raksha OS, so its agents run unchanged
+  VitalsLogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: patient_id, AttributeType: S }
+        - { AttributeName: timestamp, AttributeType: S }
+      KeySchema:
+        - { AttributeName: patient_id, KeyType: HASH }
+        - { AttributeName: timestamp, KeyType: RANGE }
+
+  CaregiverAlertsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: alert_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: alert_id, KeyType: HASH }
+
+  CarePlansTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: patient_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: patient_id, KeyType: HASH }
+
+  AdherenceLogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: patient_id, AttributeType: S }
+        - { AttributeName: timestamp, AttributeType: S }
+      KeySchema:
+        - { AttributeName: patient_id, KeyType: HASH }
+        - { AttributeName: timestamp, KeyType: RANGE }
+
+  ConversationStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: patient_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: patient_id, KeyType: HASH }
+      TimeToLiveSpecification: { AttributeName: expires_at, Enabled: true }
+
+  # New for the MCP layer: family feed + pending approvals
+  LedgerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${AWS::StackName}-monthly"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 50 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref CaregiverEmail }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref CaregiverEmail }]
+
+Outputs:
+  McpEndpoint:
+    Description: Register this URL as the MCP server (Streamable HTTP), with the bearer token
+    Value: !Sub "${RakshaMcpFunctionUrl.FunctionUrl}mcp"
+  FamilyFeed:
+    Value: !Sub "${RakshaMcpFunctionUrl.FunctionUrl}family"
+  CarePlansTableName:
+    Value: !Ref CarePlansTable
+  AdherenceTableName:
+    Value: !Ref AdherenceLogTable

@@ -1,0 +1,10 @@
+# MCP server (Streamable HTTP, spec 2025-11-25 and 2026-07-28)
+mcp==2.3.0
+# Raksha's blast-radius policy engine (policies/blast_radius.cedar)
+cedarpy==4.12.0
+boto3>=1.40
+# Claude on Amazon Bedrock (scam classifier, simulator agent)
+anthropic>=1.11,<2
+uvicorn>=0.30
+# Local mode: simulated DynamoDB so the whole demo runs without an AWS account
+moto[dynamodb]>=5.1

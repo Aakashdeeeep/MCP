@@ -1,0 +1,38 @@
+"""Runtime settings, all from environment variables.
+
+RAKSHA_MODE=local (default) runs everything in-process: DynamoDB and SNS are simulated with
+moto, notifications land in the family feed, and no AWS account is needed.
+RAKSHA_MODE=aws uses the real tables, SNS topic and Bedrock in the deploy region.
+"""
+import os
+
+MODE = os.environ.get("RAKSHA_MODE", "local").lower()
+LOCAL = MODE != "aws"
+
+ELDER_NAME = os.environ.get("RAKSHA_ELDER_NAME", "Kamala")
+FAMILY_NAME = os.environ.get("RAKSHA_FAMILY_NAME", "Priya")
+
+# Shared secret Alexa+ (or any MCP client) sends as "Authorization: Bearer <token>".
+# Empty = no auth, which is only acceptable locally.
+MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
+
+# Where the family opens approval links. In AWS mode this is the Function URL.
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
+APPROVAL_PASSCODE = os.environ.get("APPROVAL_PASSCODE", "")
+APPROVAL_TTL_SECONDS = int(os.environ.get("APPROVAL_TTL_SECONDS", "3600"))
+
+LEDGER_TABLE = os.environ.get("LEDGER_TABLE", "RakshaMcpLedger")
+
+# Bedrock (Claude via the Messages-API "Mantle" endpoint). Used by check_scam to judge the
+# situations the keyword tripwire can't. Off unless RAKSHA_BEDROCK=1, so tests stay offline.
+BEDROCK_ENABLED = os.environ.get("RAKSHA_BEDROCK", "0") == "1"
+BEDROCK_REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
+SCAM_MODEL_ID = os.environ.get("SCAM_MODEL_ID", "anthropic.claude-haiku-4-5")
+
+# 0.0.0.0 when hosted (Lambda Web Adapter); localhost keeps the SDK's DNS-rebinding guard on.
+HOST = os.environ.get("RAKSHA_HOST", "127.0.0.1")
+# Stateless Streamable HTTP suits Lambda: any instance can answer any request. A stateless
+# 2025-11-25 connection has no back-channel for server-to-client requests, so elicitation is
+# then only used on 2026-07-28 connections (where it rides InputRequiredResult) and the
+# family's approval remains the gate either way.
+STATELESS = os.environ.get("RAKSHA_STATELESS", "0" if LOCAL else "1") == "1"

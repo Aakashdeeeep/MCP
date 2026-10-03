@@ -1,0 +1,33 @@
+{
+  "Raksha": {
+    "entityTypes": {
+      "Elder": {},
+      "Tool": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "agent": { "type": "String" },
+            "zone": { "type": "Long" },
+            "moves_money": { "type": "Boolean" }
+          }
+        }
+      }
+    },
+    "actions": {
+      "RunTool": {
+        "appliesTo": {
+          "principalTypes": ["Elder"],
+          "resourceTypes": ["Tool"],
+          "context": {
+            "type": "Record",
+            "attributes": {
+              "effective_zone": { "type": "Long" },
+              "approved": { "type": "Boolean" },
+              "amount_inr": { "type": "Long" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
